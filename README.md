@@ -1,5 +1,5 @@
-# Telegram Bot "Котики и не только" @randcatbot
-Open this bot you can [here](https://t.me/randcatbot)
+# Telegram Bot "Котики и не только" ("Cats & not only")
+[@randcatbot](https://t.me/randcatbot) is a [Telegram](https://telegram.org) bot, written thanks to the [Telegram Bot Api](https://core.telegram.org/bots/api) and the [Python Aiogram framework](https://github.com/aiogram/aiogram). More information about this bot (in Russian) you can read [here](https://telegra.ph/O-Telegram-bote-randcatbot-04-22).
 
 License: MIT
 
