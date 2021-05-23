@@ -20,9 +20,9 @@ Q: Is the author obsessed with cats?
 A: No... At least I want to believe it....
 
 # Screenshots
-![Screenshot of cat](https://github.com/sadykhzadeh/randcatbot/blob/master/screenshots/Hello_Cat.png)
-![Screenshot of inline cat](https://github.com/sadykhzadeh/randcatbot/blob/master/screenshots/Hello_Inline_Cat.png)
-![Screenshot of dog](https://github.com/sadykhzadeh/randcatbot/blob/master/screenshots/Hello_Dog.png)
+![Screenshot of cat](https://github.com/Sadykhzadeh/randcatbot-py/blob/master/screenshots/Hello_Cat.png)
+![Screenshot of inline cat](https://github.com/Sadykhzadeh/randcatbot-py/blob/master/screenshots/Hello_Inline_Cat.png)
+![Screenshot of dog](https://github.com/Sadykhzadeh/randcatbot-py/blob/master/screenshots/Hello_Dog.png)
 
 ## Author
 (C) 2020 by [Azer Sadykhzadeh](https://sadykhzadeh.github.io).
