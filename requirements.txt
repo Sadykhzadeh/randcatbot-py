@@ -9,5 +9,5 @@ emoji==0.5.4
 idna==2.9
 multidict==4.7.5
 pytz==2019.3
-requests==2.23.0
+requests==2.31.0
 yarl==1.4.2
