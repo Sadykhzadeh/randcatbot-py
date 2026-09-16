@@ -31,6 +31,9 @@ logging.basicConfig(format=u'[%(asctime)s] %(levelname)+8s \t\t \
 					[LINE:%(lineno)+3s] \t %(message)s',
 					level=logging.INFO)
 
+if not token:
+	raise SystemExit("BOT_TOKEN is not set. Get one from @BotFather and export it.")
+
 bot = Bot(token=token)
 #bot = Bot(token=token, proxy = "http://proxy.server:3128")
 dp = Dispatcher(bot)
