@@ -7,7 +7,12 @@ Telegram: @Sadykhzadeh [https://t.me/Sadykhzadeh]
 Github: https://github.com/sadykhzadeh
 '''
 
-token = "Your token from @BotFather"
+import os
+
+# The token comes from the environment. It used to be a literal here, which
+# meant running the bot started with editing a tracked file — and one `git
+# commit -a` later the token is in the history of a public repository for good.
+token = os.environ.get("BOT_TOKEN", "")
 
 start_text = '''
 😺Привет!🐶
