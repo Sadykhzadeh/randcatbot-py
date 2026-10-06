@@ -1,13 +1,8 @@
-aiogram==2.7
-aiohttp==3.7.4
-async-timeout==3.0.1
-attrs==19.3.0
-Babel==2.9.1
-certifi==2022.12.7
-chardet==3.0.4
-emoji==0.5.4
-idna==2.9
-multidict==4.7.5
-pytz==2019.3
-requests==2.23.0
-yarl==1.4.2
+# Direct dependencies only. The previous file also pinned transitive ones -
+# yarl==1.4.2 and multidict==4.7.5 among them - and neither has a wheel for a
+# current interpreter, so `pip install -r requirements.txt` failed to build
+# from source and the project could not be installed at all.
+#
+# aiogram 2.x requires aiohttp>=3.8,<3.9, which has no wheels past Python
+# 3.11, so that is the ceiling until the bot moves to aiogram 3.
+aiogram==2.25.2
