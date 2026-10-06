@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # aiogram 2.x pins aiohttp>=3.8,<3.9, which has no wheels past 3.11.
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile main.py animals.py config.py
+      - name: the handlers have to register
+        env:
+          BOT_TOKEN: '123456:AAFakeTokenForImportOnly'
+        run: |
+          python -c "import main; assert main.dp.message_handlers.handlers; assert main.dp.inline_query_handlers.handlers; print('handlers registered')"
+      - name: starting without a token has to fail loudly
+        run: |
+          if python -c "import main" 2>/dev/null; then echo "expected a failure"; exit 1; fi
+          echo "refused as expected"

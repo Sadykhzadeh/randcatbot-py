@@ -5,6 +5,22 @@ License: MIT
 
 *The code has NOT been polished and is provided "as is". There's a lot of code that is redundant and there are tons of improvements that can be made.*
 
+# Running it
+
+```sh
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+export BOT_TOKEN=...        # from @BotFather; see .env.example
+python main.py
+```
+
+Needs **Python 3.8 - 3.11**: aiogram 2.x requires `aiohttp>=3.8,<3.9`, and
+that has no wheels for newer interpreters. Moving to aiogram 3 is what lifts
+the ceiling.
+
+`BOT_TOKEN` is read from the environment and the bot refuses to start without
+it.
+
 # FAQ
 
 Q: Where exactly does the bot take photos from?
