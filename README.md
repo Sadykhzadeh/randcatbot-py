@@ -19,6 +19,16 @@ Needs **Python 3.10 - 3.14**, the range aiogram 3 supports.
 `BOT_TOKEN` is read from the environment and the bot refuses to start without
 it.
 
+## Tests
+
+```sh
+python -m unittest -v
+```
+
+They need neither a token nor the network. The handlers run through the real
+dispatcher against a bot whose HTTP session records every Bot API call
+instead of sending it (`tests/helpers.py`), and the animal APIs are mocked.
+
 # FAQ
 
 Q: Where exactly does the bot take photos from?

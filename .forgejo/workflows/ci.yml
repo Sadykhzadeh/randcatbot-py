@@ -27,3 +27,5 @@ jobs:
           if out=$(python main.py 2>&1); then echo "expected a failure"; exit 1; fi
           echo "$out" | grep -q "BOT_TOKEN is not set"
           echo "refused as expected"
+      - name: tests
+        run: python -m unittest -v
