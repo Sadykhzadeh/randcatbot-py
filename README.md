@@ -14,9 +14,7 @@ export BOT_TOKEN=...        # from @BotFather; see .env.example
 python main.py
 ```
 
-Needs **Python 3.8 - 3.11**: aiogram 2.x requires `aiohttp>=3.8,<3.9`, and
-that has no wheels for newer interpreters. Moving to aiogram 3 is what lifts
-the ceiling.
+Needs **Python 3.10 - 3.14**, the range aiogram 3 supports.
 
 `BOT_TOKEN` is read from the environment and the bot refuses to start without
 it.

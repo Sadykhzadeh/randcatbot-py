@@ -3,6 +3,5 @@
 # current interpreter, so `pip install -r requirements.txt` failed to build
 # from source and the project could not be installed at all.
 #
-# aiogram 2.x requires aiohttp>=3.8,<3.9, which has no wheels past Python
-# 3.11, so that is the ceiling until the bot moves to aiogram 3.
-aiogram==2.25.2
+# aiogram 3 brings aiohttp with it, and supports Python 3.10 - 3.14.
+aiogram==3.31.0
