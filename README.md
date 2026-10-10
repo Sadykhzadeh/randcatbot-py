@@ -12,6 +12,9 @@ License: MIT
   bot in Telegram's default privacy mode is not shown plain messages there.
 - **/help**: how to use the bot. The commands are also in the menu next to
   the input field; the bot sets it on every start.
+- **Inline**, in any chat: type `@randcatbot` and pick one of two cats and two
+  dogs. `@randcatbot кот` (or `cat`) offers four cats, `@randcatbot собака`
+  (or `dog`) four dogs.
 
 # Running it
 
@@ -49,7 +52,8 @@ does not wait on any of these APIs.
 
 Q: Why are there no dogs in inline mode?
 
-A: This is all under development, so far the inline mode is only able to send a random cat.
+A: There are now. Inline mode used to send a single random cat; it offers two
+cats and two dogs, or four of either if the query asks for one.
 
 Q: Is the author obsessed with cats?
 
