@@ -41,25 +41,47 @@ async def process_start_command(msg: Message):
 async def process_help_command(msg: Message):
 	await msg.reply(help_text, parse_mode=ParseMode.HTML)
 
+# What a query has to contain to ask for one animal only. Anything else, the
+# empty query included, gets some of each.
+INLINE_WORDS = {
+	"cat": ("кот", "кош", "cat", "kitt"),
+	"dog": ("соб", "пёс", "пес", "щен", "dog", "pup"),
+}
+INLINE_RESULTS = 4
+
 @dp.inline_query()
 async def inline_echo(iq: InlineQuery):
-	try:
-		photo_url, caption = await Animals.give_me_a_cat()
-	except Exception:
-		# An unanswered inline query used to leave the client spinning.
-		logging.exception("inline cat request failed")
-		await iq.answer(results=[], cache_time=1)
-		return
-	cat = InlineQueryResultPhoto(
-		# Telegram wants a string of 1-64 bytes here; this was a float straight
-		# out of random.uniform.
-		id = str(uuid.uuid4()),
-		photo_url = photo_url,
-		thumbnail_url = photo_url,
-		title = "😺",
-		caption = caption
+	query = iq.query.lower()
+	kinds = [kind for kind, words in INLINE_WORDS.items() if any(w in query for w in words)]
+	if len(kinds) != 1:
+		kinds = ["cat", "dog"]
+	picks = (kinds * INLINE_RESULTS)[:INLINE_RESULTS]
+	# Straight from the pools, so normally nothing here waits on the network.
+	got = await asyncio.gather(
+		*((Animals.give_me_a_cat if kind == "cat" else Animals.give_me_a_dog)() for kind in picks),
+		return_exceptions=True,
 	)
-	await iq.answer(results=[cat], cache_time = 1)
+	results = []
+	for kind, item in zip(picks, got):
+		if isinstance(item, Unavailable):
+			logging.warning("inline: no source for a %s: %s", kind, item)
+			continue
+		if isinstance(item, Exception):
+			logging.error("inline: could not get a %s", kind, exc_info=item)
+			continue
+		photo_url, caption = item
+		results.append(InlineQueryResultPhoto(
+			# Telegram wants a string of 1-64 bytes here; this was a float
+			# straight out of random.uniform.
+			id = str(uuid.uuid4()),
+			photo_url = photo_url,
+			thumbnail_url = photo_url,
+			title = "😺" if kind == "cat" else "🐶",
+			caption = caption
+		))
+	# Answered even when empty: an unanswered inline query leaves the client
+	# spinning.
+	await iq.answer(results=results, cache_time = 1)
 
 async def send_animal(msg: Message, kind):
 	if kind == "cat":

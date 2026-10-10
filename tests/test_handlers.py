@@ -153,31 +153,57 @@ class KeywordTest(HandlerTest):
 
 
 class InlineTest(HandlerTest):
-	async def test_an_inline_query_is_answered_with_a_cat(self):
-		update = inline_query("")
+	async def answer(self, query):
+		update = inline_query(query)
 		await self.feed(update)
 		[answer] = self.session.sent("AnswerInlineQuery")
 		self.assertEqual(answer.inline_query_id, update.inline_query.id)
-		[result] = answer.results
-		self.assertEqual(result.photo_url, CAT[0])
-		self.assertEqual(result.thumbnail_url, CAT[0])
-		self.assertEqual(result.caption, CAT[1])
+		return answer.results
+
+	async def test_an_empty_query_offers_cats_and_dogs(self):
+		results = await self.answer("")
+		self.assertEqual([r.photo_url for r in results], [CAT[0], DOG[0]] * 2)
+		self.assertEqual([r.title for r in results], ["😺", "🐶"] * 2)
+		cat = results[0]
+		self.assertEqual(cat.thumbnail_url, CAT[0])
+		self.assertEqual(cat.caption, CAT[1])
+
+	async def test_a_query_about_cats_offers_only_cats(self):
+		results = await self.answer("Котики")
+		self.assertEqual([r.photo_url for r in results], [CAT[0]] * 4)
+		self.dog.assert_not_called()
+
+	async def test_a_query_about_dogs_offers_only_dogs(self):
+		for query in ("собака", "пёсик", "dog"):
+			self.session.requests.clear()
+			results = await self.answer(query)
+			self.assertEqual([r.photo_url for r in results], [DOG[0]] * 4, query)
+		self.cat.assert_not_called()
+
+	async def test_a_query_about_both_offers_both(self):
+		results = await self.answer("кот и собака")
+		self.assertEqual({r.photo_url for r in results}, {CAT[0], DOG[0]})
+
+	async def test_every_result_gets_its_own_valid_id(self):
+		ids = [r.id for r in await self.answer("")]
+		self.assertEqual(len(set(ids)), len(ids))
 		# Telegram wants a result id of 1-64 bytes
-		self.assertTrue(1 <= len(result.id.encode()) <= 64)
+		self.assertTrue(all(1 <= len(i.encode()) <= 64 for i in ids))
 
-	async def test_inline_results_get_fresh_ids(self):
-		await self.feed(inline_query(""))
-		await self.feed(inline_query(""))
-		first, second = self.session.sent("AnswerInlineQuery")
-		self.assertNotEqual(first.results[0].id, second.results[0].id)
+	async def test_with_the_dog_sources_down_the_cats_still_come(self):
+		self.dog.side_effect = Unavailable("_dogceo, _randomdog")
+		with self.assertLogs(level="WARNING"):
+			results = await self.answer("")
+		self.assertEqual([r.photo_url for r in results], [CAT[0]] * 2)
 
-	async def test_a_failed_inline_query_still_gets_an_answer(self):
+	async def test_with_everything_down_the_query_still_gets_an_answer(self):
 		# an unanswered inline query leaves the client spinning
 		self.cat.side_effect = Unavailable("_thecatapi, _cataas")
-		with self.assertLogs(level="ERROR"):
-			await self.feed(inline_query(""))
-		[answer] = self.session.sent("AnswerInlineQuery")
-		self.assertEqual(answer.results, [])
+		self.dog.side_effect = RuntimeError("bug")
+		with self.assertLogs(level="WARNING") as logs:
+			results = await self.answer("")
+		self.assertEqual(results, [])
+		self.assertTrue(any(r.levelno == logging.ERROR and r.exc_info for r in logs.records))
 
 
 if __name__ == "__main__":
