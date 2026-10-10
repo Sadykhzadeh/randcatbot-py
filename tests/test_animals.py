@@ -24,12 +24,16 @@ logging.getLogger("asyncio").setLevel(logging.ERROR)
 
 
 class FakeUpstream:
-	'''Answers like thecatapi and dog.ceo, ten pictures a request by default.'''
+	'''Answers like the four APIs do, ten pictures a request where they batch.'''
 
 	def __init__(self):
 		self.hits = collections.Counter()
+		self.skips = []
 		self.serial = itertools.count()
-		self.routes = {"cats": self.thecatapi, "dogs": self.dogceo}
+		self.routes = {
+			"cats": self.thecatapi, "cataas": self.cataas,
+			"dogs": self.dogceo, "randomdog": self.randomdog,
+		}
 		app = web.Application()
 		app.router.add_get("/{name}", self.handle)
 		self.server = TestServer(app)
@@ -56,6 +60,21 @@ class FakeUpstream:
 			"status": "success",
 		})
 
+	async def cataas(self, request):
+		self.skips.append(int(request.query["skip"]))
+		types = ["image/jpeg"] * 8 + ["image/png", "image/gif"]
+		return web.json_response([
+			{"id": f"k{n}", "mimetype": t, "tags": []}
+			for n, t in zip(self.serial, types)
+		])
+
+	async def randomdog(self, request):
+		return web.json_response({"url": f"https://random.dog/r{next(self.serial)}.JPG"})
+
+	@staticmethod
+	async def only_gifs(request):
+		return web.json_response([{"id": n, "url": f"https://cdn.example/g{n}.gif"} for n in range(10)])
+
 	@staticmethod
 	def failing(status):
 		async def route(request):
@@ -78,14 +97,17 @@ class PoolTest(unittest.IsolatedAsyncioTestCase):
 		await self.up.server.start_server()
 		for name, value in (
 			("CAT_API", self.up.url("cats")),
+			("CATAAS_API", self.up.url("cataas") + "?skip={}"),
 			("DOG_API", self.up.url("dogs")),
+			("RANDOMDOG_API", self.up.url("randomdog")),
 			("TIMEOUT", animals.aiohttp.ClientTimeout(total=0.5)),
 		):
 			patcher = patch.object(animals, name, value)
 			patcher.start()
 			self.addCleanup(patcher.stop)
-		self.cats = animals.Pool((animals._thecatapi,))
-		self.dogs = animals.Pool((animals._dogceo,))
+		# the same sources, in the same order, as the bot's own pools
+		self.cats = animals.Pool(animals.cats._sources)
+		self.dogs = animals.Pool(animals.dogs._sources)
 
 	async def asyncTearDown(self):
 		await self.cats.close()
@@ -126,30 +148,54 @@ class PoolTest(unittest.IsolatedAsyncioTestCase):
 		# three batches are needed; one more may be a top-up, not one per waiter
 		self.assertLessEqual(self.up.hits["dogs"], 4)
 
-	async def test_an_error_status_means_unavailable(self):
+	async def test_the_fallback_is_not_asked_while_the_main_api_answers(self):
+		await self.cats.get()
+		await self.dogs.get()
+		self.assertEqual(self.up.hits["cataas"], 0)
+		self.assertEqual(self.up.hits["randomdog"], 0)
+
+	async def test_an_error_status_falls_back_to_cataas(self):
 		self.up.routes["cats"] = FakeUpstream.failing(503)
-		with self.assertRaises(animals.Unavailable):
-			await self.cats.get()
+		urls = [await self.cats.get() for _ in range(8)]
+		self.assertTrue(all(u.startswith("https://cataas.com/cat/k") for u in urls), urls)
+		# the PNG and the GIF in the listing are skipped
+		self.assertEqual(self.up.hits["cataas"], 1)
+		self.assertTrue(all(0 <= skip < 1000 for skip in self.up.skips))
 
-	async def test_a_page_that_is_not_json_means_unavailable(self):
+	async def test_a_page_that_is_not_json_falls_back_to_random_dog(self):
 		self.up.routes["dogs"] = FakeUpstream.garbage
-		with self.assertRaises(animals.Unavailable):
-			await self.dogs.get()
+		url = await self.dogs.get()
+		self.assertRegex(url, r"^https://random\.dog/r\d+\.JPG$")
 
-	async def test_an_upstream_that_hangs_is_given_up_on(self):
+	async def test_a_batch_with_no_jpeg_in_it_falls_back(self):
+		self.up.routes["cats"] = FakeUpstream.only_gifs
+		self.assertTrue((await self.cats.get()).startswith("https://cataas.com/"))
+
+	async def test_a_hung_api_is_given_up_on_for_the_fallback(self):
 		self.up.routes["cats"] = FakeUpstream.hanging
 		loop = asyncio.get_running_loop()
 		started = loop.time()
-		with self.assertRaises(animals.Unavailable):
-			await self.cats.get()
+		self.assertTrue((await self.cats.get()).startswith("https://cataas.com/"))
 		self.assertLess(loop.time() - started, 2)
 
-	async def test_a_failed_fetch_is_retried_on_the_next_request(self):
+	async def test_with_every_source_down_it_is_unavailable(self):
 		self.up.routes["cats"] = FakeUpstream.failing(500)
+		self.up.routes["cataas"] = FakeUpstream.hanging
+		with self.assertRaises(animals.Unavailable):
+			await self.cats.get()
+		self.up.routes["dogs"] = FakeUpstream.garbage
+		self.up.routes["randomdog"] = FakeUpstream.failing(404)
+		with self.assertRaises(animals.Unavailable):
+			await self.dogs.get()
+
+	async def test_the_main_api_is_preferred_again_once_it_recovers(self):
+		self.up.routes["cats"] = FakeUpstream.failing(500)
+		self.up.routes["cataas"] = FakeUpstream.failing(500)
 		with self.assertRaises(animals.Unavailable):
 			await self.cats.get()
 		self.up.routes["cats"] = self.up.thecatapi
-		self.assertTrue(await self.cats.get())
+		self.up.routes["cataas"] = self.up.cataas
+		self.assertTrue((await self.cats.get()).startswith("https://cdn.example/"))
 
 	async def test_warm_up_fills_without_anyone_waiting(self):
 		self.cats.warm_up()

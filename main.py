@@ -19,7 +19,7 @@ from aiogram.utils.chat_action import ChatActionSender
 
 from config import token, start_text, help_text
 
-from animals import Animals, close_session, warm_up
+from animals import Animals, Unavailable, close_session, warm_up
 
 logging.basicConfig(format=u'[%(asctime)s] %(levelname)+8s \t\t \
 					[LINE:%(lineno)+3s] \t %(message)s',
@@ -66,9 +66,9 @@ async def inline_echo(iq: InlineQuery):
 async def kotik(msg: Message):
 	what_we_want = msg.text.lower().strip()
 	if what_we_want == "котик":
-		fetch = Animals.give_me_a_cat
+		fetch, unavailable = Animals.give_me_a_cat, "Котики сейчас недоступны 😿\nПопробуйте через минуту!"
 	elif what_we_want == "собачка":
-		fetch = Animals.give_me_a_dog
+		fetch, unavailable = Animals.give_me_a_dog, "Собачки сейчас недоступны 🐶\nПопробуйте через минуту!"
 	else:
 		return
 	try:
@@ -82,6 +82,11 @@ async def kotik(msg: Message):
 			# One photo is a sendPhoto. sendMediaGroup is documented for albums of
 			# 2-10 items, and aiogram 3 has no MediaGroup to build one from anyway.
 			await msg.reply_photo(photo_url, caption=caption)
+	except Unavailable as e:
+		# Every source is down. Saying so tells people a retry right now will not
+		# help; the pool has already logged why each source failed.
+		logging.warning("no source for %r: %s", what_we_want, e)
+		await msg.reply(unavailable)
 	except Exception:
 		# print() sent the traceback nowhere useful while logging was already
 		# configured, and swallowed the stack entirely.

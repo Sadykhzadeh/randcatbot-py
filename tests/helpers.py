@@ -13,6 +13,7 @@ import itertools
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, InlineQuery, Message, Sticker, Update, User
 
 BOT_USER = User(id=42, is_bot=True, first_name="randcatbot", username="randcatbot")
@@ -28,12 +29,17 @@ class FakeSession(BaseSession):
 		# seconds a method takes to answer, as sendPhoto does while Telegram
 		# downloads the picture; everything else answers at once
 		self.delays = {}
+		# Bot API methods that fail, mapped to Telegram's error description
+		self.failures = {}
 
 	async def make_request(self, bot, method, timeout=None):
 		self.requests.append(method)
 		delay = self.delays.get(type(method).__name__)
 		if delay:
 			await asyncio.sleep(delay)
+		failure = self.failures.get(type(method).__name__)
+		if failure:
+			raise TelegramBadRequest(method=method, message=failure)
 		returning = method.__returning__
 		if returning is bool:
 			return True
