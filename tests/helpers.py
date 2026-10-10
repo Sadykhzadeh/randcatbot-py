@@ -1,0 +1,90 @@
+'''
+A Bot that never talks to Telegram, and builders for the updates fed to it.
+
+FakeSession stands in for aiogram's HTTP session: every Bot API call the
+handlers make is recorded instead of sent, and answered with a plausible
+result, so a test can run the real dispatcher - filters and all - and then
+look at exactly what the bot would have sent.
+'''
+
+import datetime
+import itertools
+
+from aiogram import Bot
+from aiogram.client.session.base import BaseSession
+from aiogram.types import Chat, InlineQuery, Message, Sticker, Update, User
+
+BOT_USER = User(id=42, is_bot=True, first_name="randcatbot", username="randcatbot")
+USER = User(id=1001, is_bot=False, first_name="Ann", language_code="ru")
+
+_ids = itertools.count(1)
+
+
+class FakeSession(BaseSession):
+	def __init__(self):
+		super().__init__()
+		self.requests = []
+
+	async def make_request(self, bot, method, timeout=None):
+		self.requests.append(method)
+		returning = method.__returning__
+		if returning is bool:
+			return True
+		if returning is User:
+			return BOT_USER
+		if returning is Message:
+			return Message(
+				message_id=next(_ids),
+				date=datetime.datetime.now(datetime.timezone.utc),
+				chat=Chat(id=getattr(method, "chat_id", 1), type="private"),
+				from_user=BOT_USER,
+			)
+		return None
+
+	async def stream_content(self, *args, **kwargs):
+		raise NotImplementedError
+		yield b""
+
+	async def close(self):
+		pass
+
+	def sent(self, name):
+		'''The recorded calls of one Bot API method, e.g. sent("SendPhoto").'''
+		return [m for m in self.requests if type(m).__name__ == name]
+
+
+def make_bot():
+	session = FakeSession()
+	return Bot("42:TEST", session=session), session
+
+
+def message(text=None, *, user=USER, chat_type="private", sticker=False):
+	chat_id = user.id if chat_type == "private" else -100500
+	extra = {}
+	if sticker:
+		extra["sticker"] = Sticker(
+			file_id="s", file_unique_id="s", type="regular",
+			width=512, height=512, is_animated=False, is_video=False,
+		)
+	return Update(update_id=next(_ids), message=Message(
+		message_id=next(_ids),
+		date=datetime.datetime.now(datetime.timezone.utc),
+		chat=Chat(id=chat_id, type=chat_type),
+		from_user=user,
+		text=text,
+		**extra,
+	))
+
+
+def inline_query(query="", *, user=USER):
+	return Update(update_id=next(_ids), inline_query=InlineQuery(
+		id=str(next(_ids)), from_user=user, query=query, offset="",
+	))
+
+
+def reply_target(method):
+	'''The message id a sent message replies to, or None.'''
+	params = getattr(method, "reply_parameters", None)
+	if params is not None:
+		return params.message_id
+	return getattr(method, "reply_to_message_id", None)
