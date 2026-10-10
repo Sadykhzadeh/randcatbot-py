@@ -7,6 +7,7 @@ result, so a test can run the real dispatcher - filters and all - and then
 look at exactly what the bot would have sent.
 '''
 
+import asyncio
 import datetime
 import itertools
 
@@ -24,9 +25,15 @@ class FakeSession(BaseSession):
 	def __init__(self):
 		super().__init__()
 		self.requests = []
+		# seconds a method takes to answer, as sendPhoto does while Telegram
+		# downloads the picture; everything else answers at once
+		self.delays = {}
 
 	async def make_request(self, bot, method, timeout=None):
 		self.requests.append(method)
+		delay = self.delays.get(type(method).__name__)
+		if delay:
+			await asyncio.sleep(delay)
 		returning = method.__returning__
 		if returning is bool:
 			return True

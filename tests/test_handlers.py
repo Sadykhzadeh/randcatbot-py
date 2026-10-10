@@ -63,13 +63,20 @@ class KeywordTest(HandlerTest):
 	async def test_kotik_replies_with_a_cat_photo(self):
 		update = message("котик")
 		await self.feed(update)
-		[action] = self.session.sent("SendChatAction")
-		self.assertEqual(action.action, ChatAction.UPLOAD_PHOTO)
 		[photo] = self.session.sent("SendPhoto")
 		self.assertEqual((photo.photo, photo.caption), tuple(CAT))
 		self.assertEqual(photo.chat_id, update.message.chat.id)
 		self.assertEqual(reply_target(photo), update.message.message_id)
 		self.dog.assert_not_called()
+
+	async def test_the_upload_status_goes_out_alongside_the_photo_not_before_it(self):
+		# Awaiting sendChatAction first held every photo back by a round trip.
+		self.session.delays["SendPhoto"] = 0.05
+		await self.feed(message("котик"))
+		order = [type(m).__name__ for m in self.session.requests]
+		self.assertEqual(order, ["SendPhoto", "SendChatAction"])
+		[action] = self.session.sent("SendChatAction")
+		self.assertEqual(action.action, ChatAction.UPLOAD_PHOTO)
 
 	async def test_sobachka_ignores_case_and_surrounding_space(self):
 		await self.feed(message("  Собачка \n"))
