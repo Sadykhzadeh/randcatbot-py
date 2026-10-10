@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt
-      - run: python -m py_compile main.py animals.py config.py
+      - run: python -m py_compile main.py animals.py config.py throttle.py
       - name: the handlers have to register, without a token
         run: |
           python -c "import main; assert main.dp.message.handlers; assert main.dp.inline_query.handlers; print('handlers registered')"

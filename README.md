@@ -10,6 +10,8 @@ License: MIT
 - **котик** or **собачка** in a private chat, or **/cat** and **/dog**
   anywhere: a random picture. In groups only the commands work, because a
   bot in Telegram's default privacy mode is not shown plain messages there.
+  One picture a second per person and chat; the first request over that is
+  told to slow down, the rest are ignored until the second is up.
 - **/help**: how to use the bot. The commands are also in the menu next to
   the input field; the bot sets it on every start.
 - **Inline**, in any chat: type `@randcatbot` and pick one of two cats and two
