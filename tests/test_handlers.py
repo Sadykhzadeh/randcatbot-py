@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.enums import ChatAction, ParseMode
 
+import animals
 import main
 from animals import Unavailable
 from config import help_text, start_text
@@ -57,6 +58,37 @@ class CommandTest(HandlerTest):
 	async def test_a_command_addressed_to_another_bot_is_left_alone(self):
 		await self.feed(message("/help@otherbot", chat_type="supergroup"))
 		self.assertEqual(self.session.sent("SendMessage"), [])
+
+
+class MenuTest(HandlerTest):
+	async def test_cat_sends_a_cat(self):
+		await self.feed(message("/cat"))
+		[photo] = self.session.sent("SendPhoto")
+		self.assertEqual((photo.photo, photo.caption), tuple(CAT))
+
+	async def test_dog_works_in_a_group_when_addressed_to_this_bot(self):
+		# privacy mode shows a bot commands in a group, never plain words
+		await self.feed(message("/dog@randcatbot", chat_type="supergroup"))
+		[photo] = self.session.sent("SendPhoto")
+		self.assertEqual((photo.photo, photo.caption), tuple(DOG))
+
+	async def test_the_menu_is_set_on_startup(self):
+		with patch.object(animals, "cats"), patch.object(animals, "dogs"):
+			await main.dp.emit_startup(bot=self.bot)
+		[sent] = self.session.sent("SetMyCommands")
+		self.assertEqual([c.command for c in sent.commands], ["cat", "dog", "help"])
+		self.assertTrue(all(c.description for c in sent.commands))
+
+	async def test_every_command_in_the_menu_is_answered(self):
+		for command in main.COMMANDS:
+			await self.feed(message("/" + command.command))
+		answers = self.session.sent("SendPhoto") + self.session.sent("SendMessage")
+		self.assertEqual(len(answers), len(main.COMMANDS))
+
+	async def test_a_menu_telegram_refuses_does_not_stop_the_bot(self):
+		self.session.failures["SetMyCommands"] = "Bad Request: BOT_COMMAND_INVALID"
+		with self.assertLogs(level="WARNING"):
+			await main.set_commands(self.bot)
 
 
 class KeywordTest(HandlerTest):
