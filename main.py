@@ -12,9 +12,10 @@ import logging
 import uuid
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ChatAction, ParseMode
+from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineQuery, InlineQueryResultPhoto, Message
+from aiogram.utils.chat_action import ChatActionSender
 
 from config import token, start_text, help_text
 
@@ -64,18 +65,23 @@ async def inline_echo(iq: InlineQuery):
 @dp.message(F.text)
 async def kotik(msg: Message):
 	what_we_want = msg.text.lower().strip()
+	if what_we_want == "котик":
+		fetch = Animals.give_me_a_cat
+	elif what_we_want == "собачка":
+		fetch = Animals.give_me_a_dog
+	else:
+		return
 	try:
-		if what_we_want == "котик":
-			await msg.bot.send_chat_action(msg.chat.id, ChatAction.UPLOAD_PHOTO)
-			photo_url, caption = await Animals.give_me_a_cat()
-		elif what_we_want == "собачка":
-			await msg.bot.send_chat_action(msg.chat.id, ChatAction.UPLOAD_PHOTO)
-			photo_url, caption = await Animals.give_me_a_dog()
-		else:
-			return
-		# One photo is a sendPhoto. sendMediaGroup is documented for albums of
-		# 2-10 items, and aiogram 3 has no MediaGroup to build one from anyway.
-		await msg.reply_photo(photo_url, caption=caption)
+		# "Sending a photo..." goes out alongside the photo rather than ahead of
+		# it. Awaited first, it held every picture back by a Telegram round trip;
+		# this way it still shows while Telegram downloads the picture.
+		async with ChatActionSender.upload_photo(
+			bot=msg.bot, chat_id=msg.chat.id, message_thread_id=msg.message_thread_id,
+		):
+			photo_url, caption = await fetch()
+			# One photo is a sendPhoto. sendMediaGroup is documented for albums of
+			# 2-10 items, and aiogram 3 has no MediaGroup to build one from anyway.
+			await msg.reply_photo(photo_url, caption=caption)
 	except Exception:
 		# print() sent the traceback nowhere useful while logging was already
 		# configured, and swallowed the stack entirely.
