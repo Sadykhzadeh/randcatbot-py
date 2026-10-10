@@ -21,6 +21,7 @@ from aiogram.utils.chat_action import ChatActionSender
 from config import token, start_text, help_text
 
 from animals import Animals, Unavailable, close_session, warm_up
+from throttle import ALLOW, WARN, Throttle
 
 logging.basicConfig(format=u'[%(asctime)s] %(levelname)+8s \t\t \
 					[LINE:%(lineno)+3s] \t %(message)s',
@@ -83,7 +84,17 @@ async def inline_echo(iq: InlineQuery):
 	# spinning.
 	await iq.answer(results=results, cache_time = 1)
 
+# One picture a second per person and chat: Telegram asks bots to keep to about
+# one message a second in a chat, and past that answers with flood waits. The
+# key includes the chat because anonymous group admins all post as one user.
+limiter = Throttle(1.0)
+
 async def send_animal(msg: Message, kind):
+	verdict = limiter.hit((msg.chat.id, msg.from_user.id if msg.from_user else None))
+	if verdict != ALLOW:
+		if verdict == WARN:
+			await msg.reply("Не так быстро 🐾\nОдна картинка в секунду.")
+		return
 	if kind == "cat":
 		fetch, unavailable = Animals.give_me_a_cat, "Котики сейчас недоступны 😿\nПопробуйте через минуту!"
 	else:

@@ -3,6 +3,7 @@ The handlers, run through the real dispatcher against a bot that records what
 it would have sent. No token and no network: the animal APIs are mocked out.
 '''
 
+import itertools
 import logging
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -14,7 +15,8 @@ import animals
 import main
 from animals import Unavailable
 from config import help_text, start_text
-from tests.helpers import inline_query, make_bot, message, reply_target
+from tests.helpers import USER, inline_query, make_bot, message, reply_target
+from throttle import Throttle
 
 logging.getLogger("aiogram").setLevel(logging.WARNING)
 
@@ -31,6 +33,12 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
 			patcher = patch.object(main.Animals, name, mock)
 			patcher.start()
 			self.addCleanup(patcher.stop)
+		# A fresh limiter whose clock jumps ten seconds on every look, so tests
+		# that are not about the rate limit never run into it.
+		ticks = itertools.count(0, 10)
+		patcher = patch.object(main, "limiter", Throttle(1.0, clock=lambda: next(ticks)))
+		patcher.start()
+		self.addCleanup(patcher.stop)
 
 	async def feed(self, update):
 		return await main.dp.feed_update(self.bot, update)
@@ -150,6 +158,46 @@ class KeywordTest(HandlerTest):
 			await self.feed(message("котик"))
 		[sent] = self.session.sent("SendMessage")
 		self.assertIn("Что-то пошло не так", sent.text)
+
+
+class RateLimitTest(HandlerTest):
+	def setUp(self):
+		super().setUp()
+		self.now = 0.0
+		patcher = patch.object(main, "limiter", Throttle(1.0, clock=lambda: self.now))
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
+	async def test_a_burst_gets_one_picture_and_one_explanation(self):
+		for text in ("/cat", "котик", "/dog", "/cat"):
+			await self.feed(message(text))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
+		[sent] = self.session.sent("SendMessage")
+		self.assertIn("Не так быстро", sent.text)
+		# nothing was fetched for the refused ones
+		self.assertEqual(self.cat.await_count + self.dog.await_count, 1)
+
+	async def test_a_second_later_the_next_picture_comes(self):
+		await self.feed(message("/cat"))
+		self.now += 1
+		await self.feed(message("/dog"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 2)
+		self.assertEqual(self.session.sent("SendMessage"), [])
+
+	async def test_people_in_one_group_do_not_slow_each_other_down(self):
+		bob = USER.model_copy(update={"id": 1002, "first_name": "Bob"})
+		await self.feed(message("/cat", chat_type="supergroup"))
+		await self.feed(message("/cat", user=bob, chat_type="supergroup"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 2)
+
+	async def test_other_commands_and_inline_mode_are_not_limited(self):
+		await self.feed(message("/cat"))
+		await self.feed(message("/help"))
+		await self.feed(inline_query(""))
+		[sent] = self.session.sent("SendMessage")
+		self.assertEqual(sent.text, help_text)
+		[answer] = self.session.sent("AnswerInlineQuery")
+		self.assertEqual(len(answer.results), 4)
 
 
 class InlineTest(HandlerTest):
