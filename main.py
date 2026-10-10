@@ -18,7 +18,7 @@ from aiogram.types import InlineQuery, InlineQueryResultPhoto, Message
 
 from config import token, start_text, help_text
 
-from animals import Animals, close_session
+from animals import Animals, close_session, warm_up
 
 logging.basicConfig(format=u'[%(asctime)s] %(levelname)+8s \t\t \
 					[LINE:%(lineno)+3s] \t %(message)s',
@@ -82,6 +82,7 @@ async def kotik(msg: Message):
 		logging.exception("could not answer %r", what_we_want)
 		await msg.reply("Что-то пошло не так...\nПопробуйте снова!")
 
+dp.startup.register(warm_up)
 dp.shutdown.register(close_session)
 
 async def main():
