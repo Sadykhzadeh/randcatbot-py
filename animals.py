@@ -22,11 +22,20 @@ from config import cap_mas, dog_mas
 # answering did not make one reply slow - it stopped the bot answering anybody
 # for the length of the timeout. aiohttp is already pulled in by aiogram, so
 # the fetch can simply be awaited.
-TIMEOUT = aiohttp.ClientTimeout(total=10)
+# Per source: with a fallback behind each one, a hung API used to cost the
+# full ten seconds; two tries at five keep the worst case where it was.
+TIMEOUT = aiohttp.ClientTimeout(total=5)
 
 # Both APIs hand out ten pictures per request for the price of one.
 CAT_API = "https://api.thecatapi.com/v1/images/search?limit=10"
 DOG_API = "https://dog.ceo/api/breeds/image/random/10"
+
+# Fallbacks, asked only when the API above them fails. Cat as a Service lists
+# about 2000 cats with their types; the offset keeps a batch from always
+# being the same ten. random.dog serves one at a time, and videos unless told.
+CATAAS_API = "https://cataas.com/api/cats?limit=10&skip={}"
+CATAAS_IMAGE = "https://cataas.com/cat/{}"
+RANDOMDOG_API = "https://random.dog/woof.json?include=jpg"
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +70,15 @@ async def _thecatapi():
 
 async def _dogceo():
 	return _jpegs((await _get_json(DOG_API))["message"])
+
+
+async def _cataas():
+	cats = await _get_json(CATAAS_API.format(random.randrange(1000)))
+	return [CATAAS_IMAGE.format(c["id"]) for c in cats if c["mimetype"] == "image/jpeg"]
+
+
+async def _randomdog():
+	return _jpegs([(await _get_json(RANDOMDOG_API))["url"]])
 
 
 class Unavailable(Exception):
@@ -126,8 +144,10 @@ class Pool:
 		self._fetch = None
 
 
-cats = Pool((_thecatapi,))
-dogs = Pool((_dogceo,))
+# Every fill starts from the first source again, so a fallback is only used
+# for as long as the main API is actually down.
+cats = Pool((_thecatapi, _cataas))
+dogs = Pool((_dogceo, _randomdog))
 
 
 async def warm_up():

@@ -7,11 +7,11 @@ import logging
 import unittest
 from unittest.mock import AsyncMock, patch
 
-import aiohttp
 from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.enums import ChatAction, ParseMode
 
 import main
+from animals import Unavailable
 from config import help_text, start_text
 from tests.helpers import inline_query, make_bot, message, reply_target
 
@@ -96,11 +96,26 @@ class KeywordTest(HandlerTest):
 		self.assertIs(result, UNHANDLED)
 		self.assertEqual(self.session.requests, [])
 
-	async def test_an_upstream_failure_is_answered_not_swallowed(self):
-		self.cat.side_effect = aiohttp.ClientConnectionError("down")
-		with self.assertLogs(level="ERROR"):
+	async def test_with_every_cat_source_down_the_reply_says_so(self):
+		self.cat.side_effect = Unavailable("_thecatapi, _cataas")
+		with self.assertLogs(level="WARNING"):
 			await self.feed(message("котик"))
 		self.assertEqual(self.session.sent("SendPhoto"), [])
+		[sent] = self.session.sent("SendMessage")
+		self.assertIn("Котики сейчас недоступны", sent.text)
+		self.assertIn("через минуту", sent.text)
+
+	async def test_with_every_dog_source_down_the_reply_says_so(self):
+		self.dog.side_effect = Unavailable("_dogceo, _randomdog")
+		with self.assertLogs(level="WARNING"):
+			await self.feed(message("собачка"))
+		[sent] = self.session.sent("SendMessage")
+		self.assertIn("Собачки сейчас недоступны", sent.text)
+
+	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
+		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
+		with self.assertLogs(level="ERROR"):
+			await self.feed(message("котик"))
 		[sent] = self.session.sent("SendMessage")
 		self.assertIn("Что-то пошло не так", sent.text)
 
@@ -126,7 +141,7 @@ class InlineTest(HandlerTest):
 
 	async def test_a_failed_inline_query_still_gets_an_answer(self):
 		# an unanswered inline query leaves the client spinning
-		self.cat.side_effect = aiohttp.ClientConnectionError("down")
+		self.cat.side_effect = Unavailable("_thecatapi, _cataas")
 		with self.assertLogs(level="ERROR"):
 			await self.feed(inline_query(""))
 		[answer] = self.session.sent("AnswerInlineQuery")

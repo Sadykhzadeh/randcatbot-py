@@ -33,7 +33,11 @@ instead of sending it (`tests/helpers.py`), and the animal APIs are mocked.
 
 Q: Where exactly does the bot take photos from?
 
-A: The bot takes photos of cats from [CatAPI](https://thecatapi.com).
+A: Cats come from [TheCatAPI](https://thecatapi.com) and dogs from
+[Dog CEO](https://dog.ceo/dog-api/). When one of them is down, the bot falls
+back to [Cat as a Service](https://cataas.com) or [random.dog](https://random.dog)
+on its own. Pictures are fetched ten at a time and kept ready, so a request
+does not wait on any of these APIs.
 
 Q: Why are there no dogs in inline mode?
 
