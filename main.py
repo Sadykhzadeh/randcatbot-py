@@ -13,8 +13,9 @@ import uuid
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
-from aiogram.types import InlineQuery, InlineQueryResultPhoto, Message
+from aiogram.types import BotCommand, InlineQuery, InlineQueryResultPhoto, Message
 from aiogram.utils.chat_action import ChatActionSender
 
 from config import token, start_text, help_text
@@ -60,17 +61,11 @@ async def inline_echo(iq: InlineQuery):
 	)
 	await iq.answer(results=[cat], cache_time = 1)
 
-# aiogram 2 handed a bare message_handler() text messages only. aiogram 3 hands
-# a bare handler every message, and a sticker or a photo has no .text to lower().
-@dp.message(F.text)
-async def kotik(msg: Message):
-	what_we_want = msg.text.lower().strip()
-	if what_we_want == "котик":
+async def send_animal(msg: Message, kind):
+	if kind == "cat":
 		fetch, unavailable = Animals.give_me_a_cat, "Котики сейчас недоступны 😿\nПопробуйте через минуту!"
-	elif what_we_want == "собачка":
-		fetch, unavailable = Animals.give_me_a_dog, "Собачки сейчас недоступны 🐶\nПопробуйте через минуту!"
 	else:
-		return
+		fetch, unavailable = Animals.give_me_a_dog, "Собачки сейчас недоступны 🐶\nПопробуйте через минуту!"
 	try:
 		# "Sending a photo..." goes out alongside the photo rather than ahead of
 		# it. Awaited first, it held every picture back by a Telegram round trip;
@@ -85,15 +80,51 @@ async def kotik(msg: Message):
 	except Unavailable as e:
 		# Every source is down. Saying so tells people a retry right now will not
 		# help; the pool has already logged why each source failed.
-		logging.warning("no source for %r: %s", what_we_want, e)
+		logging.warning("no source for a %s: %s", kind, e)
 		await msg.reply(unavailable)
 	except Exception:
 		# print() sent the traceback nowhere useful while logging was already
 		# configured, and swallowed the stack entirely.
-		logging.exception("could not answer %r", what_we_want)
+		logging.exception("could not send a %s", kind)
 		await msg.reply("Что-то пошло не так...\nПопробуйте снова!")
 
+# Commands work where the words cannot: in a group, a bot in Telegram's default
+# privacy mode is only shown commands, never a plain "котик".
+@dp.message(Command('cat'))
+async def cat_command(msg: Message):
+	await send_animal(msg, "cat")
+
+@dp.message(Command('dog'))
+async def dog_command(msg: Message):
+	await send_animal(msg, "dog")
+
+KEYWORDS = {"котик": "cat", "собачка": "dog"}
+
+# aiogram 2 handed a bare message_handler() text messages only. aiogram 3 hands
+# a bare handler every message, and a sticker or a photo has no .text to lower().
+@dp.message(F.text)
+async def kotik(msg: Message):
+	kind = KEYWORDS.get(msg.text.lower().strip())
+	if kind:
+		await send_animal(msg, kind)
+
+# The menu Telegram shows next to the input field.
+COMMANDS = [
+	BotCommand(command="cat", description="Случайный котик"),
+	BotCommand(command="dog", description="Случайная собачка"),
+	BotCommand(command="help", description="Как пользоваться ботом"),
+]
+
+async def set_commands(bot: Bot):
+	# The menu is a convenience; not having one is no reason to refuse to start.
+	try:
+		await bot.set_my_commands(COMMANDS)
+	except TelegramAPIError:
+		logging.warning("could not set the command menu", exc_info=True)
+
+# warm_up only starts the fetches, so the menu is set while the pools fill.
 dp.startup.register(warm_up)
+dp.startup.register(set_commands)
 dp.shutdown.register(close_session)
 
 async def main():

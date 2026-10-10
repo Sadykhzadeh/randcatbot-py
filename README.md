@@ -5,6 +5,14 @@ License: MIT
 
 *The code has NOT been polished and is provided "as is". There's a lot of code that is redundant and there are tons of improvements that can be made.*
 
+# Using it
+
+- **котик** or **собачка** in a private chat, or **/cat** and **/dog**
+  anywhere: a random picture. In groups only the commands work, because a
+  bot in Telegram's default privacy mode is not shown plain messages there.
+- **/help**: how to use the bot. The commands are also in the menu next to
+  the input field; the bot sets it on every start.
+
 # Running it
 
 ```sh
