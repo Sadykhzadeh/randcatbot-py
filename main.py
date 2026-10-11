@@ -11,6 +11,9 @@ import asyncio
 import logging
 import uuid
 
+# Has to come before the first aiogram import; see lazy_models.py.
+import lazy_models  # noqa: F401
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
