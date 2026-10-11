@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # aiogram 3 supports 3.10 - 3.14; test the floor and the current ones.
+        python-version: ['3.10', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile main.py animals.py config.py throttle.py lazy_models.py
+      - name: the handlers have to register, without a token
+        run: |
+          python -c "import main; assert main.dp.message.handlers; assert main.dp.inline_query.handlers; print('handlers registered')"
+      - name: starting without a token has to fail loudly
+        run: |
+          if out=$(python main.py 2>&1); then echo "expected a failure"; exit 1; fi
+          echo "$out" | grep -q "BOT_TOKEN is not set"
+          echo "refused as expected"
+      - name: tests
+        run: python -m unittest -v
