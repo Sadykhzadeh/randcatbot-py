@@ -172,6 +172,16 @@ class KeywordTest(HandlerTest):
 		self.assertEqual(self.session.sent("SendMessage"), [])
 		self.assertTrue(all(r.levelno == logging.WARNING for r in logs.records))
 
+	async def test_a_refused_upload_status_is_not_logged_as_an_error(self):
+		# Telegram limits sendChatAction too, and the status goes out from a
+		# task nobody awaits
+		self.session.delays["SendPhoto"] = 0.05
+		self.session.flood_waits["SendChatAction"] = 30
+		with self.assertNoLogs(level="ERROR"):
+			await self.feed(message("котик", chat_type="supergroup"))
+		self.assertEqual(len(self.session.sent("SendChatAction")), 1)
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
+
 	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
 		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
 		with self.assertLogs(level="ERROR"):

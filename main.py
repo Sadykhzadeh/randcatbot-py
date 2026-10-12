@@ -8,6 +8,7 @@ Github: https://github.com/sadykhzadeh
 '''
 
 import asyncio
+import contextlib
 import logging
 import uuid
 
@@ -99,6 +100,21 @@ async def inline_echo(iq: InlineQuery):
 # key includes the chat because anonymous group admins all post as one user.
 limiter = Throttle(1.0)
 
+class UploadStatus(ChatActionSender):
+	'''
+	"Sending a photo..." for as long as the photo takes to go out.
+
+	aiogram's sender lets a refused sendChatAction - under flood control, or in
+	a chat the bot was just removed from - end its background task with the
+	error, and nothing awaits that task, so asyncio logs the error as an
+	unhandled traceback. The status is cosmetic: failing to show it is not an
+	error, and the photo's own outcome is handled in send_animal.
+	'''
+
+	async def _worker(self):
+		with contextlib.suppress(TelegramAPIError):
+			await super()._worker()
+
 async def send_animal(msg: Message, kind):
 	verdict = limiter.hit((msg.chat.id, msg.from_user.id if msg.from_user else None))
 	if verdict != ALLOW:
@@ -113,7 +129,7 @@ async def send_animal(msg: Message, kind):
 		# "Sending a photo..." goes out alongside the photo rather than ahead of
 		# it. Awaited first, it held every picture back by a Telegram round trip;
 		# this way it still shows while Telegram downloads the picture.
-		async with ChatActionSender.upload_photo(
+		async with UploadStatus.upload_photo(
 			bot=msg.bot, chat_id=msg.chat.id, message_thread_id=msg.message_thread_id,
 		):
 			photo_url, caption = await fetch()
