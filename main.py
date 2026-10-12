@@ -18,7 +18,7 @@ import lazy_models  # noqa: F401
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BotCommand, InlineQuery, InlineQueryResultPhoto, Message
 from aiogram.utils.chat_action import ChatActionSender
@@ -145,7 +145,14 @@ async def send_animal(msg: Message, kind):
 		# Flood control: Telegram refuses anything more into this chat until the
 		# wait is over, so an apology would only be refused the same way.
 		logging.warning("flood control in chat %s for %s s, a %s was dropped", msg.chat.id, e.retry_after, kind)
-	except Exception:
+	except Exception as e:
+		if isinstance(e, TelegramBadRequest) and "not enough rights to send photos" in e.message:
+			# The group does not let its members send media, and the bot is a
+			# member like any other: trying again will never work, but text
+			# still gets through.
+			logging.warning("no right to send photos in chat %s", msg.chat.id)
+			await msg.reply("Здесь мне нельзя отправлять фото 😿\nАдминистраторы могут разрешить это в настройках группы.")
+			return
 		# print() sent the traceback nowhere useful while logging was already
 		# configured, and swallowed the stack entirely.
 		logging.exception("could not send a %s", kind)

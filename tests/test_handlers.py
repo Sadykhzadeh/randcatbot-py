@@ -182,6 +182,15 @@ class KeywordTest(HandlerTest):
 		self.assertEqual(len(self.session.sent("SendChatAction")), 1)
 		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
 
+	async def test_a_group_that_forbids_photos_is_told_so(self):
+		# a group whose members may not send media, and the bot is a member
+		self.session.failures["SendPhoto"] = "Bad Request: not enough rights to send photos to the chat"
+		with self.assertLogs(level="WARNING") as logs:
+			await self.feed(message("/cat", chat_type="supergroup"))
+		[sent] = self.session.sent("SendMessage")
+		self.assertIn("нельзя отправлять фото", sent.text)
+		self.assertTrue(all(r.levelno == logging.WARNING and not r.exc_info for r in logs.records))
+
 	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
 		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
 		with self.assertLogs(level="ERROR"):
