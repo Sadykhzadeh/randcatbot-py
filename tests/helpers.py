@@ -16,6 +16,8 @@ from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Chat, InlineQuery, Message, Sticker, Update, User
 
+from main import DEFAULTS
+
 BOT_USER = User(id=42, is_bot=True, first_name="randcatbot", username="randcatbot")
 USER = User(id=1001, is_bot=False, first_name="Ann", language_code="ru")
 
@@ -31,6 +33,8 @@ class FakeSession(BaseSession):
 		self.delays = {}
 		# Bot API methods that fail, mapped to Telegram's error description
 		self.failures = {}
+		# ids of messages deleted before the bot got to answer them
+		self.deleted = set()
 
 	async def make_request(self, bot, method, timeout=None):
 		self.requests.append(method)
@@ -40,6 +44,11 @@ class FakeSession(BaseSession):
 		failure = self.failures.get(type(method).__name__)
 		if failure:
 			raise TelegramBadRequest(method=method, message=failure)
+		reply = getattr(method, "reply_parameters", None)
+		if reply is not None and reply.message_id in self.deleted:
+			# resolved the way the real session does, bot defaults included
+			if not self.prepare_value(reply, bot, {}, _dumps_json=False).get("allow_sending_without_reply"):
+				raise TelegramBadRequest(method=method, message="Bad Request: message to be replied not found")
 		returning = method.__returning__
 		if returning is bool:
 			return True
@@ -68,7 +77,7 @@ class FakeSession(BaseSession):
 
 def make_bot():
 	session = FakeSession()
-	return Bot("42:TEST", session=session), session
+	return Bot("42:TEST", session=session, default=DEFAULTS), session
 
 
 def message(text=None, *, user=USER, chat_type="private", sticker=False):

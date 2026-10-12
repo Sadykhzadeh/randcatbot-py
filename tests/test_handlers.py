@@ -152,6 +152,16 @@ class KeywordTest(HandlerTest):
 		[sent] = self.session.sent("SendMessage")
 		self.assertIn("Собачки сейчас недоступны", sent.text)
 
+	async def test_a_message_deleted_before_the_answer_still_gets_one(self):
+		# as in a group whose admin bot deletes every command on arrival
+		for text in ("/cat", "/help"):
+			update = message(text, chat_type="supergroup")
+			self.session.deleted.add(update.message.message_id)
+			await self.feed(update)
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
+		[sent] = self.session.sent("SendMessage")
+		self.assertEqual(sent.text, help_text)
+
 	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
 		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
 		with self.assertLogs(level="ERROR"):
