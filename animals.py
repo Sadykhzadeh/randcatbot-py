@@ -12,6 +12,7 @@ import collections
 import contextlib
 import logging
 import random
+import time
 
 import aiohttp
 
@@ -100,15 +101,21 @@ class Pool:
 	empty share the one fetch in flight rather than each starting their own.
 	'''
 
-	def __init__(self, sources, low=3):
+	# Seconds after every source failed during which requests are told so at
+	# once instead of each waiting on the same failures again.
+	REST = 30
+
+	def __init__(self, sources, low=3, clock=time.monotonic):
 		self._sources = sources
 		self._low = low
+		self._clock = clock
 		self._urls = collections.deque()
 		self._fetch = None
+		self._down_until = 0
 
 	async def get(self):
 		while not self._urls:
-			if not await asyncio.shield(self._start_fetch()):
+			if self._clock() < self._down_until or not await asyncio.shield(self._start_fetch()):
 				raise Unavailable(", ".join(s.__name__ for s in self._sources))
 		url = self._urls.popleft()
 		if len(self._urls) < self._low:
@@ -134,6 +141,7 @@ class Pool:
 				self._urls.extend(urls)
 				return True
 			log.warning("%s gave no usable picture", source.__name__)
+		self._down_until = self._clock() + self.REST
 		return False
 
 	async def close(self):
