@@ -162,6 +162,16 @@ class KeywordTest(HandlerTest):
 		[sent] = self.session.sent("SendMessage")
 		self.assertEqual(sent.text, help_text)
 
+	async def test_under_flood_control_nothing_more_is_sent_into_the_chat(self):
+		# Telegram refuses everything into the chat until the wait is over,
+		# so an apology would only be refused as well
+		self.session.flood_waits.update(SendPhoto=30, SendMessage=30)
+		with self.assertLogs(level="WARNING") as logs:
+			await self.feed(message("котик", chat_type="supergroup"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
+		self.assertEqual(self.session.sent("SendMessage"), [])
+		self.assertTrue(all(r.levelno == logging.WARNING for r in logs.records))
+
 	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
 		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
 		with self.assertLogs(level="ERROR"):

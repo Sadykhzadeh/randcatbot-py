@@ -13,7 +13,7 @@ import itertools
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Chat, InlineQuery, Message, Sticker, Update, User
 
 from main import DEFAULTS
@@ -33,6 +33,9 @@ class FakeSession(BaseSession):
 		self.delays = {}
 		# Bot API methods that fail, mapped to Telegram's error description
 		self.failures = {}
+		# Bot API methods refused by flood control, mapped to the seconds
+		# Telegram asks the bot to wait
+		self.flood_waits = {}
 		# ids of messages deleted before the bot got to answer them
 		self.deleted = set()
 
@@ -41,6 +44,9 @@ class FakeSession(BaseSession):
 		delay = self.delays.get(type(method).__name__)
 		if delay:
 			await asyncio.sleep(delay)
+		wait = self.flood_waits.get(type(method).__name__)
+		if wait:
+			raise TelegramRetryAfter(method=method, message="Too Many Requests", retry_after=wait)
 		failure = self.failures.get(type(method).__name__)
 		if failure:
 			raise TelegramBadRequest(method=method, message=failure)
