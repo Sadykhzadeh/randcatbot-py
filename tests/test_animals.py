@@ -106,8 +106,9 @@ class PoolTest(unittest.IsolatedAsyncioTestCase):
 			patcher.start()
 			self.addCleanup(patcher.stop)
 		# the same sources, in the same order, as the bot's own pools
-		self.cats = animals.Pool(animals.cats._sources)
-		self.dogs = animals.Pool(animals.dogs._sources)
+		self.now = 0.0
+		self.cats = animals.Pool(animals.cats._sources, clock=lambda: self.now)
+		self.dogs = animals.Pool(animals.dogs._sources, clock=lambda: self.now)
 
 	async def asyncTearDown(self):
 		await self.cats.close()
@@ -195,7 +196,28 @@ class PoolTest(unittest.IsolatedAsyncioTestCase):
 			await self.cats.get()
 		self.up.routes["cats"] = self.up.thecatapi
 		self.up.routes["cataas"] = self.up.cataas
+		self.now += animals.Pool.REST
 		self.assertTrue((await self.cats.get()).startswith("https://cdn.example/"))
+
+	async def test_right_after_every_source_failed_requests_are_refused_at_once(self):
+		self.up.routes["cats"] = FakeUpstream.hanging
+		self.up.routes["cataas"] = FakeUpstream.hanging
+		with self.assertRaises(animals.Unavailable):
+			await self.cats.get()
+		hits = sum(self.up.hits.values())
+		loop = asyncio.get_running_loop()
+		started = loop.time()
+		self.now += animals.Pool.REST - 1
+		for _ in range(3):
+			with self.assertRaises(animals.Unavailable):
+				await self.cats.get()
+		self.assertLess(loop.time() - started, 0.1)
+		self.assertEqual(sum(self.up.hits.values()), hits)
+		# the rest is over: both are asked again
+		self.now += 1
+		with self.assertRaises(animals.Unavailable):
+			await self.cats.get()
+		self.assertEqual(sum(self.up.hits.values()), hits + 2)
 
 	async def test_warm_up_fills_without_anyone_waiting(self):
 		self.cats.warm_up()
