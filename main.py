@@ -17,7 +17,7 @@ import lazy_models  # noqa: F401
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BotCommand, InlineQuery, InlineQueryResultPhoto, Message
 from aiogram.utils.chat_action import ChatActionSender
@@ -124,6 +124,10 @@ async def send_animal(msg: Message, kind):
 		# help; the pool has already logged why each source failed.
 		logging.warning("no source for a %s: %s", kind, e)
 		await msg.reply(unavailable)
+	except TelegramRetryAfter as e:
+		# Flood control: Telegram refuses anything more into this chat until the
+		# wait is over, so an apology would only be refused the same way.
+		logging.warning("flood control in chat %s for %s s, a %s was dropped", msg.chat.id, e.retry_after, kind)
 	except Exception:
 		# print() sent the traceback nowhere useful while logging was already
 		# configured, and swallowed the stack entirely.
