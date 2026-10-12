@@ -15,6 +15,7 @@ import uuid
 import lazy_models  # noqa: F401
 
 from aiogram import Bot, Dispatcher, F
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
@@ -33,6 +34,11 @@ logging.basicConfig(format=u'[%(asctime)s] %(levelname)+8s \t\t \
 # The dispatcher holds the handlers and needs no bot, so importing this module
 # (the tests do) works without a token. The Bot is only made in main().
 dp = Dispatcher()
+
+# Every answer is a reply, and Telegram refuses a reply to a message that is
+# gone - deleted by its sender, or by a group's admin bot the moment a command
+# arrives - unless told to send it anyway.
+DEFAULTS = DefaultBotProperties(allow_sending_without_reply=True)
 
 @dp.message(CommandStart())
 async def process_start_command(msg: Message):
@@ -169,7 +175,7 @@ async def main():
 	# `async with` closes the HTTP session even when the first call fails, as
 	# it does with a revoked token.
 	#async with Bot(token=token, session=AiohttpSession(proxy="http://proxy.server:3128")) as bot:
-	async with Bot(token=token) as bot:
+	async with Bot(token=token, default=DEFAULTS) as bot:
 		# aiogram 2's skip_updates=True: whatever queued up while the bot was
 		# down is dropped rather than answered all at once.
 		await bot.delete_webhook(drop_pending_updates=True)
