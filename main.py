@@ -27,8 +27,9 @@ from config import token, start_text, help_text
 from animals import Animals, Unavailable, close_session, warm_up
 from throttle import ALLOW, WARN, Throttle
 
-logging.basicConfig(format=u'[%(asctime)s] %(levelname)+8s \t\t \
-					[LINE:%(lineno)+3s] \t %(message)s',
+# The module as well as the line: a warning can come from here, animals.py or
+# aiogram, and a line number alone does not say which.
+logging.basicConfig(format='[%(asctime)s] %(levelname)8s [%(module)s:%(lineno)d] %(message)s',
 					level=logging.INFO)
 
 # The dispatcher holds the handlers and needs no bot, so importing this module
