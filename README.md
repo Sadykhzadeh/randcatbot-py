@@ -30,7 +30,48 @@ python main.py
 Needs **Python 3.10 - 3.14**, the range aiogram 3 supports.
 
 `BOT_TOKEN` is read from the environment and the bot refuses to start without
-it.
+it. Nothing reads `.env` by itself; to use one, copy `.env.example` to `.env`,
+put the token in, and load it with `set -a; . ./.env; set +a` before
+`python main.py`, or hand it to systemd as below.
+
+Only one copy of the bot can run per token: Telegram gives updates to one
+poller, and a second one gets `Conflict: terminated by other getUpdates
+request`. Messages sent while the bot was down are dropped on start, not
+answered all at once.
+
+## Keeping it running
+
+The bot polls Telegram, so it needs no open port or domain, only outgoing
+HTTPS. Logs go to stderr. A systemd unit for a checkout in
+`/opt/randcatbot-py` owned by a `randcatbot` user, set up as above, with the
+token in its `.env`:
+
+```ini
+# /etc/systemd/system/randcatbot.service
+[Unit]
+Description=@randcatbot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=randcatbot
+WorkingDirectory=/opt/randcatbot-py
+EnvironmentFile=/opt/randcatbot-py/.env
+ExecStart=/opt/randcatbot-py/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo systemctl enable --now randcatbot
+journalctl -u randcatbot -f
+```
+
+`systemctl stop` sends SIGTERM, which stops the polling and closes the
+connections cleanly.
 
 ## Tests
 
