@@ -19,8 +19,8 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
-from aiogram.filters import Command, CommandStart
-from aiogram.types import BotCommand, InlineQuery, InlineQueryResultPhoto, Message
+from aiogram.filters import Command, CommandStart, ExceptionTypeFilter
+from aiogram.types import BotCommand, ErrorEvent, InlineQuery, InlineQueryResultPhoto, Message
 from aiogram.utils.chat_action import ChatActionSender
 
 from config import token, start_text, help_text
@@ -141,10 +141,10 @@ async def send_animal(msg: Message, kind):
 		# help; the pool has already logged why each source failed.
 		logging.warning("no source for a %s: %s", kind, e)
 		await msg.reply(unavailable)
-	except TelegramRetryAfter as e:
-		# Flood control: Telegram refuses anything more into this chat until the
-		# wait is over, so an apology would only be refused the same way.
-		logging.warning("flood control in chat %s for %s s, a %s was dropped", msg.chat.id, e.retry_after, kind)
+	except TelegramRetryAfter:
+		# Left to flood_control below: an apology would only be refused the
+		# same way.
+		raise
 	except Exception as e:
 		if isinstance(e, TelegramBadRequest) and "not enough rights to send photos" in e.message:
 			# The group does not let its members send media, and the bot is a
@@ -177,6 +177,17 @@ async def kotik(msg: Message):
 	kind = KEYWORDS.get(msg.text.lower().strip())
 	if kind:
 		await send_animal(msg, kind)
+
+# Flood control: Telegram refuses anything more into a chat until the wait is
+# over. A busy group gets there even with each person limited, and then the
+# "slow down", /help and inline answers are refused as well as photos. What
+# was being sent is dropped; nothing else is sent, it would be refused too.
+@dp.errors(ExceptionTypeFilter(TelegramRetryAfter))
+async def flood_control(event: ErrorEvent):
+	e = event.exception
+	chat = getattr(e.method, "chat_id", None)
+	logging.warning("flood control for %s s, %s%s was dropped", e.retry_after,
+					type(e.method).__name__, f" to chat {chat}" if chat else "")
 
 # The menu Telegram shows next to the input field.
 COMMANDS = [
