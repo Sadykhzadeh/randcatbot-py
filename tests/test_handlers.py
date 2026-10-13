@@ -240,6 +240,18 @@ class RateLimitTest(HandlerTest):
 		# nothing was fetched for the refused ones
 		self.assertEqual(self.cat.await_count + self.dog.await_count, 1)
 
+	async def test_under_flood_control_no_reply_ends_in_a_traceback(self):
+		# the chat is over its limit: the "slow down", /help and the
+		# inline answer are refused just like a photo
+		self.session.flood_waits.update(SendPhoto=30, SendMessage=30, AnswerInlineQuery=5)
+		with self.assertLogs(level="WARNING") as logs:
+			for update in (message("/cat"), message("/cat"), message("/help"), inline_query("")):
+				await self.feed(update)
+		self.assertEqual(len(self.session.sent("SendMessage")), 2)
+		self.assertEqual(len(self.session.sent("AnswerInlineQuery")), 1)
+		self.assertEqual(len(logs.records), 4)
+		self.assertTrue(all(r.levelno == logging.WARNING and not r.exc_info for r in logs.records))
+
 	async def test_a_second_later_the_next_picture_comes(self):
 		await self.feed(message("/cat"))
 		self.now += 1
