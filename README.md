@@ -39,6 +39,11 @@ poller, and a second one gets `Conflict: terminated by other getUpdates
 request`. Messages sent while the bot was down are dropped on start, not
 answered all at once.
 
+Inline mode is off for a new bot, and Telegram sends it no inline queries
+until it is switched on: send `/setinline` to @BotFather, pick the bot and
+give it a placeholder, e.g. `кот или собака`. The command menu needs nothing
+there, since the bot sets it itself.
+
 ## Keeping it running
 
 The bot polls Telegram, so it needs no open port or domain, only outgoing
