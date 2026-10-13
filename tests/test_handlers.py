@@ -8,6 +8,7 @@ import logging
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from aiogram import Bot
 from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.enums import ChatAction, ParseMode
 
@@ -15,7 +16,7 @@ import animals
 import main
 from animals import Unavailable
 from config import help_text, start_text
-from tests.helpers import USER, inline_query, make_bot, message, reply_target
+from tests.helpers import FakeSession, USER, inline_query, make_bot, message, reply_target
 from throttle import Throttle
 
 logging.getLogger("aiogram").setLevel(logging.WARNING)
@@ -66,6 +67,29 @@ class CommandTest(HandlerTest):
 	async def test_a_command_addressed_to_another_bot_is_left_alone(self):
 		await self.feed(message("/help@otherbot", chat_type="supergroup"))
 		self.assertEqual(self.session.sent("SendMessage"), [])
+
+
+class MainTest(unittest.IsolatedAsyncioTestCase):
+	# The handler tests build their own Bot; this checks the one main() makes.
+	async def test_main_starts_the_bot_the_way_the_handlers_are_tested(self):
+		bots = []
+		def make(**kwargs):
+			bots.append(Bot(session=FakeSession(), **kwargs))
+			return bots[-1]
+		with patch.object(main, "token", "42:TEST"), patch.object(main, "Bot", make), \
+				patch.object(main.dp, "start_polling", AsyncMock()) as polling:
+			await main.main()
+		[bot] = bots
+		self.assertTrue(bot.default.allow_sending_without_reply)
+		[delete] = bot.session.sent("DeleteWebhook")
+		self.assertTrue(delete.drop_pending_updates)
+		polling.assert_awaited_once_with(bot)
+
+	async def test_main_refuses_to_start_without_a_token(self):
+		with patch.object(main, "token", ""), patch.object(main, "Bot") as bot:
+			with self.assertRaises(SystemExit):
+				await main.main()
+		bot.assert_not_called()
 
 
 class MenuTest(HandlerTest):
