@@ -148,6 +148,17 @@ class KeywordTest(HandlerTest):
 		self.assertEqual((photo.photo, photo.caption), tuple(DOG))
 		self.cat.assert_not_called()
 
+	async def test_punctuation_and_emoji_around_the_word_do_not_matter(self):
+		for text in ("Котик!", "котик)))", "котик?", "😺 котик 😻", "собачка🐶", "«Собачка»."):
+			await self.feed(message(text))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 6)
+		self.assertEqual((self.cat.await_count, self.dog.await_count), (4, 2))
+
+	async def test_the_word_inside_other_text_gets_no_answer(self):
+		for text in ("котик и собачка", "мой котик спит", "котики"):
+			await self.feed(message(text))
+		self.assertEqual(self.session.requests, [])
+
 	async def test_other_text_gets_no_answer(self):
 		await self.feed(message("привет"))
 		self.assertEqual(self.session.requests, [])
