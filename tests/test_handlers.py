@@ -21,6 +21,7 @@ from throttle import Throttle
 
 logging.getLogger("aiogram").setLevel(logging.WARNING)
 
+HELP = help_text.format(username="randcatbot")
 CAT = ["https://cdn.example/cat.jpg", "Красивый котик."]
 DOG = ["https://cdn.example/dog.jpg", "Красивая собачка."]
 
@@ -56,13 +57,21 @@ class CommandTest(HandlerTest):
 	async def test_help_is_sent_as_html(self):
 		await self.feed(message("/help"))
 		[sent] = self.session.sent("SendMessage")
-		self.assertEqual(sent.text, help_text)
+		self.assertEqual(sent.text, HELP)
 		self.assertEqual(sent.parse_mode, ParseMode.HTML)
+
+	async def test_help_names_the_bot_it_is_sent_by_for_inline_mode(self):
+		# a copy of the bot run under another name
+		self.session.me = self.session.me.model_copy(update={"username": "mycatsbot"})
+		await self.feed(message("/help"))
+		[sent] = self.session.sent("SendMessage")
+		self.assertIn("набери @mycatsbot", sent.text)
+		self.assertNotIn("@randcatbot", sent.text)
 
 	async def test_a_command_addressed_to_this_bot_in_a_group_works(self):
 		await self.feed(message("/help@randcatbot", chat_type="supergroup"))
 		[sent] = self.session.sent("SendMessage")
-		self.assertEqual(sent.text, help_text)
+		self.assertEqual(sent.text, HELP)
 
 	async def test_a_command_addressed_to_another_bot_is_left_alone(self):
 		await self.feed(message("/help@otherbot", chat_type="supergroup"))
@@ -195,7 +204,7 @@ class KeywordTest(HandlerTest):
 			await self.feed(update)
 		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
 		[sent] = self.session.sent("SendMessage")
-		self.assertEqual(sent.text, help_text)
+		self.assertEqual(sent.text, HELP)
 
 	async def test_under_flood_control_nothing_more_is_sent_into_the_chat(self):
 		# Telegram refuses everything into the chat until the wait is over,
@@ -303,7 +312,7 @@ class RateLimitTest(HandlerTest):
 		await self.feed(message("/help"))
 		await self.feed(inline_query(""))
 		[sent] = self.session.sent("SendMessage")
-		self.assertEqual(sent.text, help_text)
+		self.assertEqual(sent.text, HELP)
 		[answer] = self.session.sent("AnswerInlineQuery")
 		self.assertEqual(len(answer.results), 4)
 

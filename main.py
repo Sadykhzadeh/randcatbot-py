@@ -55,7 +55,11 @@ async def process_start_command(msg: Message):
 
 @dp.message(Command('help'))
 async def process_help_command(msg: Message):
-	await msg.reply(help_text, parse_mode=ParseMode.HTML)
+	# Inline mode starts with the bot's name, and a copy of the bot run from
+	# this repository is not @randcatbot. aiogram asked Telegram for it when
+	# polling started, so this costs no request.
+	me = await msg.bot.me()
+	await msg.reply(help_text.format(username=me.username), parse_mode=ParseMode.HTML)
 
 # What a query has to contain to ask for one animal only. Anything else, the
 # empty query included, gets some of each.

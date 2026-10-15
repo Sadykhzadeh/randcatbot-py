@@ -39,6 +39,8 @@ class FakeSession(BaseSession):
 		self.flood_waits = {}
 		# ids of messages deleted before the bot got to answer them
 		self.deleted = set()
+		# what getMe answers
+		self.me = BOT_USER
 
 	async def make_request(self, bot, method, timeout=None):
 		self.requests.append(method)
@@ -61,7 +63,7 @@ class FakeSession(BaseSession):
 		if returning is bool:
 			return True
 		if returning is User:
-			return BOT_USER
+			return self.me
 		if returning is Message:
 			return Message(
 				message_id=next(_ids),
