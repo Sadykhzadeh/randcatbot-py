@@ -18,7 +18,7 @@ import lazy_models  # noqa: F401
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.filters import Command, CommandStart, ExceptionTypeFilter
 from aiogram.types import BotCommand, ErrorEvent, InlineQuery, InlineQueryResultPhoto, Message
 from aiogram.utils.chat_action import ChatActionSender
@@ -141,9 +141,9 @@ async def send_animal(msg: Message, kind):
 		# help; the pool has already logged why each source failed.
 		logging.warning("no source for a %s: %s", kind, e)
 		await msg.reply(unavailable)
-	except TelegramRetryAfter:
-		# Left to flood_control below: an apology would only be refused the
-		# same way.
+	except (TelegramRetryAfter, TelegramForbiddenError):
+		# Left to the error handlers below: an apology would only be refused
+		# the same way.
 		raise
 	except Exception as e:
 		if isinstance(e, TelegramBadRequest) and "not enough rights to send photos" in e.message:
@@ -188,6 +188,16 @@ async def flood_control(event: ErrorEvent):
 	chat = getattr(e.method, "chat_id", None)
 	logging.warning("flood control for %s s, %s%s was dropped", e.retry_after,
 					type(e.method).__name__, f" to chat {chat}" if chat else "")
+
+# The bot may not write into the chat at all: a group's admins muted it, or it
+# was removed or blocked while an answer was on its way. It still sees the
+# commands, but nothing it sends there gets through, the apology included.
+@dp.errors(ExceptionTypeFilter(TelegramForbiddenError))
+@dp.errors(ExceptionTypeFilter(TelegramBadRequest), F.exception.message.contains("not enough rights to send"))
+async def cannot_write(event: ErrorEvent):
+	e = event.exception
+	logging.warning("%s to chat %s was refused: %s", type(e.method).__name__,
+					getattr(e.method, "chat_id", None), e.message)
 
 # The menu Telegram shows next to the input field.
 COMMANDS = [
