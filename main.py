@@ -10,6 +10,7 @@ Github: https://github.com/sadykhzadeh
 import asyncio
 import contextlib
 import logging
+import re
 import uuid
 
 # Has to come before the first aiogram import; see lazy_models.py.
@@ -169,12 +170,14 @@ async def dog_command(msg: Message):
 	await send_animal(msg, "dog")
 
 KEYWORDS = {"котик": "cat", "собачка": "dog"}
+# What people put around the word: "Котик!", "котик)", "собачка 🐶".
+AROUND_WORD = re.compile(r"^\W+|\W+$")
 
 # aiogram 2 handed a bare message_handler() text messages only. aiogram 3 hands
 # a bare handler every message, and a sticker or a photo has no .text to lower().
 @dp.message(F.text)
 async def kotik(msg: Message):
-	kind = KEYWORDS.get(msg.text.lower().strip())
+	kind = KEYWORDS.get(AROUND_WORD.sub("", msg.text.lower()))
 	if kind:
 		await send_animal(msg, kind)
 
