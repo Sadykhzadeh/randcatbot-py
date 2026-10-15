@@ -215,6 +215,28 @@ class KeywordTest(HandlerTest):
 		self.assertIn("нельзя отправлять фото", sent.text)
 		self.assertTrue(all(r.levelno == logging.WARNING and not r.exc_info for r in logs.records))
 
+	async def test_a_bot_muted_in_a_group_logs_one_line_per_refusal(self):
+		# the admins took away the right to send anything; commands still
+		# reach the bot, but its answers, the apology too, are all refused
+		self.session.failures.update(
+			SendPhoto="Bad Request: not enough rights to send photos to the chat",
+			SendMessage="Bad Request: not enough rights to send text messages to the chat",
+		)
+		with self.assertLogs(level="WARNING") as logs:
+			await self.feed(message("/cat", chat_type="supergroup"))
+			await self.feed(message("/help", chat_type="supergroup"))
+		self.assertEqual(len(self.session.sent("SendMessage")), 2)
+		self.assertTrue(all(r.levelno == logging.WARNING and not r.exc_info for r in logs.records))
+
+	async def test_a_bot_removed_before_the_photo_went_out_tries_nothing_more(self):
+		self.session.failures["SendPhoto"] = "Forbidden: bot was kicked from the supergroup chat"
+		with self.assertLogs(level="WARNING") as logs:
+			await self.feed(message("/dog", chat_type="supergroup"))
+		self.assertEqual(self.session.sent("SendMessage"), [])
+		[record] = logs.records
+		self.assertEqual(record.levelno, logging.WARNING)
+		self.assertIn("kicked", record.getMessage())
+
 	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
 		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
 		with self.assertLogs(level="ERROR"):

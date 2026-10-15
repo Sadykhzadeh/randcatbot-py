@@ -13,7 +13,7 @@ import itertools
 
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import Chat, InlineQuery, Message, Sticker, Update, User
 
 from main import DEFAULTS
@@ -31,7 +31,8 @@ class FakeSession(BaseSession):
 		# seconds a method takes to answer, as sendPhoto does while Telegram
 		# downloads the picture; everything else answers at once
 		self.delays = {}
-		# Bot API methods that fail, mapped to Telegram's error description
+		# Bot API methods that fail, mapped to Telegram's error description;
+		# one starting "Forbidden" is a 403, as Telegram sends it
 		self.failures = {}
 		# Bot API methods refused by flood control, mapped to the seconds
 		# Telegram asks the bot to wait
@@ -49,7 +50,8 @@ class FakeSession(BaseSession):
 			raise TelegramRetryAfter(method=method, message="Too Many Requests", retry_after=wait)
 		failure = self.failures.get(type(method).__name__)
 		if failure:
-			raise TelegramBadRequest(method=method, message=failure)
+			error = TelegramForbiddenError if failure.startswith("Forbidden") else TelegramBadRequest
+			raise error(method=method, message=failure)
 		reply = getattr(method, "reply_parameters", None)
 		if reply is not None and reply.message_id in self.deleted:
 			# resolved the way the real session does, bot defaults included
