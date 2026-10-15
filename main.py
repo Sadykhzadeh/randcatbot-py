@@ -21,7 +21,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.filters import Command, CommandStart, ExceptionTypeFilter
-from aiogram.types import BotCommand, ErrorEvent, InlineQuery, InlineQueryResultPhoto, Message
+from aiogram.types import (
+	BotCommand, CallbackQuery, ErrorEvent, InlineKeyboardButton, InlineKeyboardMarkup,
+	InlineQuery, InlineQueryResultPhoto, Message,
+)
 from aiogram.utils.chat_action import ChatActionSender
 
 from config import token, start_text, help_text
@@ -109,19 +112,33 @@ class UploadStatus(ChatActionSender):
 	a chat the bot was just removed from - end its background task with the
 	error, and nothing awaits that task, so asyncio logs the error as an
 	unhandled traceback. The status is cosmetic: failing to show it is not an
-	error, and the photo's own outcome is handled in send_animal.
+	error, and the photo's own outcome is handled in send_picture.
 	'''
 
 	async def _worker(self):
 		with contextlib.suppress(TelegramAPIError):
 			await super()._worker()
 
+SLOW_DOWN = "Не так быстро 🐾\nОдна картинка в секунду."
+
+# The button under every picture, for one more of the same.
+MORE = {
+	kind: InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=text, callback_data="more:" + kind)]])
+	for kind, text in (("cat", "🐱 Ещё котика"), ("dog", "🐶 Ещё собачку"))
+}
+
 async def send_animal(msg: Message, kind):
 	verdict = limiter.hit((msg.chat.id, msg.from_user.id if msg.from_user else None))
 	if verdict != ALLOW:
 		if verdict == WARN:
-			await msg.reply("Не так быстро 🐾\nОдна картинка в секунду.")
+			await msg.reply(SLOW_DOWN)
 		return
+	await send_picture(msg, kind, reply=True)
+
+async def send_picture(msg, kind, reply):
+	# A reply to the message that asked for it, or, for a button, simply into
+	# the chat: replying to the picture before would chain them all together.
+	answer, answer_photo = (msg.reply, msg.reply_photo) if reply else (msg.answer, msg.answer_photo)
 	if kind == "cat":
 		fetch, unavailable = Animals.give_me_a_cat, "Котики сейчас недоступны 😿\nПопробуйте через минуту!"
 	else:
@@ -131,17 +148,19 @@ async def send_animal(msg: Message, kind):
 		# it. Awaited first, it held every picture back by a Telegram round trip;
 		# this way it still shows while Telegram downloads the picture.
 		async with UploadStatus.upload_photo(
-			bot=msg.bot, chat_id=msg.chat.id, message_thread_id=msg.message_thread_id,
+			# Telegram can hand a button's message over as an
+			# InaccessibleMessage, which has no thread.
+			bot=msg.bot, chat_id=msg.chat.id, message_thread_id=getattr(msg, "message_thread_id", None),
 		):
 			photo_url, caption = await fetch()
 			# One photo is a sendPhoto. sendMediaGroup is documented for albums of
 			# 2-10 items, and aiogram 3 has no MediaGroup to build one from anyway.
-			await msg.reply_photo(photo_url, caption=caption)
+			await answer_photo(photo_url, caption=caption, reply_markup=MORE[kind])
 	except Unavailable as e:
 		# Every source is down. Saying so tells people a retry right now will not
 		# help; the pool has already logged why each source failed.
 		logging.warning("no source for a %s: %s", kind, e)
-		await msg.reply(unavailable)
+		await answer(unavailable)
 	except (TelegramRetryAfter, TelegramForbiddenError):
 		# Left to the error handlers below: an apology would only be refused
 		# the same way.
@@ -152,12 +171,12 @@ async def send_animal(msg: Message, kind):
 			# member like any other: trying again will never work, but text
 			# still gets through.
 			logging.warning("no right to send photos in chat %s", msg.chat.id)
-			await msg.reply("Здесь мне нельзя отправлять фото 😿\nАдминистраторы могут разрешить это в настройках группы.")
+			await answer("Здесь мне нельзя отправлять фото 😿\nАдминистраторы могут разрешить это в настройках группы.")
 			return
 		# print() sent the traceback nowhere useful while logging was already
 		# configured, and swallowed the stack entirely.
 		logging.exception("could not send a %s", kind)
-		await msg.reply("Что-то пошло не так...\nПопробуйте снова!")
+		await answer("Что-то пошло не так...\nПопробуйте снова!")
 
 # Commands work where the words cannot: in a group, a bot in Telegram's default
 # privacy mode is only shown commands, never a plain "котик".
@@ -168,6 +187,18 @@ async def cat_command(msg: Message):
 @dp.message(Command('dog'))
 async def dog_command(msg: Message):
 	await send_animal(msg, "dog")
+
+@dp.callback_query(F.data.in_({"more:cat", "more:dog"}), F.message)
+async def more_button(cq: CallbackQuery):
+	kind = cq.data.removeprefix("more:")
+	# The same limit as for asking in words, with the refusal shown under the
+	# button rather than sent into the chat.
+	if limiter.hit((cq.message.chat.id, cq.from_user.id)) != ALLOW:
+		await cq.answer(SLOW_DOWN)
+		return
+	# Answered first, so the button stops spinning while the picture goes out.
+	await cq.answer()
+	await send_picture(cq.message, kind, reply=False)
 
 KEYWORDS = {"котик": "cat", "собачка": "dog"}
 # What people put around the word: "Котик!", "котик)", "собачка 🐶".

@@ -16,7 +16,7 @@ import animals
 import main
 from animals import Unavailable
 from config import help_text, start_text
-from tests.helpers import FakeSession, USER, inline_query, make_bot, message, reply_target
+from tests.helpers import FakeSession, USER, button, inline_query, make_bot, message, reply_target
 from throttle import Throttle
 
 logging.getLogger("aiogram").setLevel(logging.WARNING)
@@ -306,6 +306,75 @@ class RateLimitTest(HandlerTest):
 		self.assertEqual(sent.text, help_text)
 		[answer] = self.session.sent("AnswerInlineQuery")
 		self.assertEqual(len(answer.results), 4)
+
+
+class MoreButtonTest(HandlerTest):
+	def setUp(self):
+		super().setUp()
+		self.now = 0.0
+		patcher = patch.object(main, "limiter", Throttle(1.0, clock=lambda: self.now))
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
+	def more(self, photo):
+		[[button]] = photo.reply_markup.inline_keyboard
+		return button.callback_data
+
+	async def test_every_picture_comes_with_a_button_for_one_more(self):
+		for text in ("/cat", "котик", "/dog", "собачка"):
+			self.now += 1
+			await self.feed(message(text))
+		photos = self.session.sent("SendPhoto")
+		self.assertEqual([self.more(p) for p in photos], ["more:cat"] * 2 + ["more:dog"] * 2)
+
+	async def test_the_button_sends_one_more_of_the_same_into_the_chat(self):
+		update = button("more:dog", chat_type="supergroup")
+		await self.feed(update)
+		[photo] = self.session.sent("SendPhoto")
+		self.assertEqual((photo.photo, photo.caption), tuple(DOG))
+		self.assertEqual(photo.chat_id, update.callback_query.message.chat.id)
+		# not a reply: that would chain every picture to the one before
+		self.assertIsNone(reply_target(photo))
+		self.assertEqual(self.more(photo), "more:dog")
+		self.cat.assert_not_called()
+
+	async def test_the_button_stops_spinning_before_the_picture_goes_out(self):
+		await self.feed(button("more:cat"))
+		[answer] = self.session.sent("AnswerCallbackQuery")
+		self.assertIsNone(answer.text)
+		order = [type(m).__name__ for m in self.session.requests]
+		self.assertLess(order.index("AnswerCallbackQuery"), order.index("SendPhoto"))
+
+	async def test_pressing_too_fast_is_told_under_the_button_not_in_the_chat(self):
+		await self.feed(message("/cat"))
+		for _ in range(3):
+			await self.feed(button("more:cat"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
+		self.assertEqual(self.session.sent("SendMessage"), [])
+		answers = self.session.sent("AnswerCallbackQuery")
+		self.assertEqual(len(answers), 3)
+		self.assertTrue(all("Не так быстро" in a.text for a in answers))
+		self.now += 1
+		await self.feed(button("more:cat"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 2)
+
+	async def test_a_button_on_a_message_telegram_will_not_show_still_works(self):
+		await self.feed(button("more:cat", chat_type="supergroup", inaccessible=True))
+		[photo] = self.session.sent("SendPhoto")
+		self.assertEqual(photo.chat_id, -100500)
+
+	async def test_with_the_sources_down_the_chat_is_told_without_a_reply(self):
+		self.cat.side_effect = Unavailable("_thecatapi, _cataas")
+		with self.assertLogs(level="WARNING"):
+			await self.feed(button("more:cat"))
+		[sent] = self.session.sent("SendMessage")
+		self.assertIn("Котики сейчас недоступны", sent.text)
+		self.assertIsNone(reply_target(sent))
+
+	async def test_a_button_it_does_not_know_is_left_alone(self):
+		result = await self.feed(button("something"))
+		self.assertIs(result, UNHANDLED)
+		self.assertEqual(self.session.requests, [])
 
 
 class InlineTest(HandlerTest):

@@ -14,7 +14,7 @@ import itertools
 from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.types import Chat, InlineQuery, Message, Sticker, Update, User
+from aiogram.types import CallbackQuery, Chat, InaccessibleMessage, InlineQuery, Message, Sticker, Update, User
 
 from main import DEFAULTS
 
@@ -109,6 +109,23 @@ def message(text=None, *, user=USER, chat_type="private", sticker=False):
 def inline_query(query="", *, user=USER):
 	return Update(update_id=next(_ids), inline_query=InlineQuery(
 		id=str(next(_ids)), from_user=user, query=query, offset="",
+	))
+
+
+def button(data, *, user=USER, chat_type="private", inaccessible=False):
+	'''A press on a button under a message the bot sent earlier.'''
+	chat = Chat(id=user.id if chat_type == "private" else -100500, type=chat_type)
+	if inaccessible:
+		msg = InaccessibleMessage(chat=chat, message_id=next(_ids))
+	else:
+		msg = Message(
+			message_id=next(_ids),
+			date=datetime.datetime.now(datetime.timezone.utc),
+			chat=chat,
+			from_user=BOT_USER,
+		)
+	return Update(update_id=next(_ids), callback_query=CallbackQuery(
+		id=str(next(_ids)), from_user=user, chat_instance="1", data=data, message=msg,
 	))
 
 
