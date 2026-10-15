@@ -29,6 +29,8 @@ class FakeUpstream:
 	def __init__(self):
 		self.hits = collections.Counter()
 		self.skips = []
+		# what random.dog reports as each picture's size, in turn
+		self.dog_sizes = iter(())
 		self.serial = itertools.count()
 		self.routes = {
 			"cats": self.thecatapi, "cataas": self.cataas,
@@ -69,7 +71,10 @@ class FakeUpstream:
 		])
 
 	async def randomdog(self, request):
-		return web.json_response({"url": f"https://random.dog/r{next(self.serial)}.JPG"})
+		return web.json_response({
+			"fileSizeBytes": next(self.dog_sizes, 86906),
+			"url": f"https://random.dog/r{next(self.serial)}.JPG",
+		})
 
 	@staticmethod
 	async def only_gifs(request):
@@ -167,6 +172,21 @@ class PoolTest(unittest.IsolatedAsyncioTestCase):
 		self.up.routes["dogs"] = FakeUpstream.garbage
 		url = await self.dogs.get()
 		self.assertRegex(url, r"^https://random\.dog/r\d+\.JPG$")
+
+	async def test_a_random_dog_too_big_for_telegram_is_skipped(self):
+		self.up.routes["dogs"] = FakeUpstream.failing(503)
+		self.up.dog_sizes = iter([11_476_001, 5_476_798, 2_770_862])
+		url = await self.dogs.get()
+		self.assertEqual(self.up.hits["randomdog"], 3)
+		self.assertRegex(url, r"^https://random\.dog/r\d+\.JPG$")
+		self.assertEqual(len(self.dogs._urls), 0)
+
+	async def test_random_dog_giving_only_big_pictures_counts_as_down(self):
+		self.up.routes["dogs"] = FakeUpstream.failing(503)
+		self.up.dog_sizes = itertools.repeat(6_109_341)
+		with self.assertRaises(animals.Unavailable):
+			await self.dogs.get()
+		self.assertEqual(self.up.hits["randomdog"], 3)
 
 	async def test_a_batch_with_no_jpeg_in_it_falls_back(self):
 		self.up.routes["cats"] = FakeUpstream.only_gifs

@@ -38,6 +38,10 @@ CATAAS_API = "https://cataas.com/api/cats?limit=10&skip={}"
 CATAAS_IMAGE = "https://cataas.com/cat/{}"
 RANDOMDOG_API = "https://random.dog/woof.json?include=jpg"
 
+# Telegram fetches a photo sent by URL, or offered in inline mode, only up to
+# 5 MB. random.dog keeps camera originals, and about one in thirty is bigger.
+MAX_PHOTO_BYTES = 5_000_000
+
 log = logging.getLogger(__name__)
 
 _session = None
@@ -79,7 +83,15 @@ async def _cataas():
 
 
 async def _randomdog():
-	return _jpegs([(await _get_json(RANDOMDOG_API))["url"]])
+	# One picture a request, and it says how big it is: a few tries find one
+	# Telegram will take.
+	for _ in range(3):
+		dog = await _get_json(RANDOMDOG_API)
+		url, size = dog["url"], dog.get("fileSizeBytes", 0)
+		if size <= MAX_PHOTO_BYTES:
+			return _jpegs([url])
+		log.info("random.dog: %s is %d bytes, over the limit", url, size)
+	return []
 
 
 class Unavailable(Exception):
