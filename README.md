@@ -12,6 +12,9 @@ License: MIT
   bot in Telegram's default privacy mode is not shown plain messages there.
   One picture a second per person and chat; the first request over that is
   told to slow down, the rest are ignored until the second is up.
+- Under every picture the bot sends this way, a button for **one more** of
+  the same. It counts towards the same limit; pressing it too fast is
+  answered with a notice under the button, not a message in the chat.
 - **/help**: how to use the bot. The commands are also in the menu next to
   the input field; the bot sets it on every start.
 - **Inline**, in any chat: type `@randcatbot` and pick one of two cats and two
