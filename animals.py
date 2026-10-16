@@ -146,8 +146,10 @@ class Pool:
 		for source in self._sources:
 			try:
 				urls = await source()
-			except _SOURCE_ERRORS:
-				log.warning("%s failed", source.__name__, exc_info=True)
+			except _SOURCE_ERRORS as e:
+				# One line: the traceback of a timeout or a refused connection is
+				# sixty lines of aiohttp internals that say no more than this.
+				log.warning("%s failed: %s", source.__name__, f"{type(e).__name__}: {e}".removesuffix(": "))
 				continue
 			if urls:
 				self._urls.extend(urls)
