@@ -209,6 +209,18 @@ class PoolTest(unittest.IsolatedAsyncioTestCase):
 		with self.assertRaises(animals.Unavailable):
 			await self.dogs.get()
 
+	async def test_a_failing_source_is_logged_in_one_line(self):
+		self.up.routes["cats"] = FakeUpstream.hanging
+		self.up.routes["cataas"] = FakeUpstream.failing(503)
+		with self.assertLogs("animals", level="WARNING") as logs:
+			with self.assertRaises(animals.Unavailable):
+				await self.cats.get()
+		self.assertEqual([r.getMessage().split(",")[0] for r in logs.records], [
+			"_thecatapi failed: TimeoutError",
+			"_cataas failed: ClientResponseError: 503",
+		])
+		self.assertTrue(all(r.exc_info is None for r in logs.records))
+
 	async def test_the_main_api_is_preferred_again_once_it_recovers(self):
 		self.up.routes["cats"] = FakeUpstream.failing(500)
 		self.up.routes["cataas"] = FakeUpstream.failing(500)
