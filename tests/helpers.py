@@ -111,9 +111,9 @@ def message(text=None, *, user=USER, chat_type="private", sticker=False):
 	))
 
 
-def inline_query(query="", *, user=USER):
+def inline_query(query="", *, user=USER, offset=""):
 	return Update(update_id=next(_ids), inline_query=InlineQuery(
-		id=str(next(_ids)), from_user=user, query=query, offset="",
+		id=str(next(_ids)), from_user=user, query=query, offset=offset,
 	))
 
 

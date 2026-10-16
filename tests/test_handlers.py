@@ -417,11 +417,12 @@ class MoreButtonTest(HandlerTest):
 
 
 class InlineTest(HandlerTest):
-	async def answer(self, query):
-		update = inline_query(query)
+	async def answer(self, query, offset=""):
+		update = inline_query(query, offset=offset)
 		await self.feed(update)
 		[answer] = self.session.sent("AnswerInlineQuery")
 		self.assertEqual(answer.inline_query_id, update.inline_query.id)
+		self.next_offset = answer.next_offset
 		return answer.results
 
 	async def test_an_empty_query_offers_cats_and_dogs(self):
@@ -448,6 +449,24 @@ class InlineTest(HandlerTest):
 		results = await self.answer("кот и собака")
 		self.assertEqual({r.photo_url for r in results}, {CAT[0], DOG[0]})
 
+	async def test_scrolling_to_the_end_brings_four_more(self):
+		await self.answer("кот")
+		self.assertEqual(self.next_offset, "1")
+		for _ in range(2):
+			self.session.requests.clear()
+			results = await self.answer("кот", offset=self.next_offset)
+			self.assertEqual(len(results), 4)
+		self.assertEqual(self.next_offset, "3")
+		self.assertEqual(self.cat.await_count, 12)
+
+	async def test_an_offset_the_bot_did_not_give_counts_as_the_first_page(self):
+		# "²" is a digit to str.isdigit(), and int() refuses it
+		for offset in ("garbage", "²"):
+			self.session.requests.clear()
+			results = await self.answer("", offset=offset)
+			self.assertEqual(len(results), 4)
+			self.assertEqual(self.next_offset, "1")
+
 	async def test_every_result_gets_its_own_valid_id(self):
 		ids = [r.id for r in await self.answer("")]
 		self.assertEqual(len(set(ids)), len(ids))
@@ -467,6 +486,8 @@ class InlineTest(HandlerTest):
 		with self.assertLogs(level="WARNING") as logs:
 			results = await self.answer("")
 		self.assertEqual(results, [])
+		# and the client is not sent to ask for a next page of nothing
+		self.assertEqual(self.next_offset, "")
 		self.assertTrue(any(r.levelno == logging.ERROR and r.exc_info for r in logs.records))
 
 

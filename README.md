@@ -19,7 +19,7 @@ License: MIT
   the input field; the bot sets it on every start.
 - **Inline**, in any chat: type `@randcatbot` and pick one of two cats and two
   dogs. `@randcatbot кот` (or `cat`) offers four cats, `@randcatbot собака`
-  (or `dog`) four dogs.
+  (or `dog`) four dogs. Scrolling to the end of the list brings four more.
 
 # Running it
 
