@@ -131,6 +131,15 @@ MORE = {
 	for kind, text in (("cat", "🐱 Ещё котика"), ("dog", "🐶 Ещё собачку"))
 }
 
+# What Telegram answers when it cannot use the picture behind a URL: gone,
+# broken, not an image after all, or of a size it does not take. Another
+# picture from the pool will usually do.
+UNUSABLE_PHOTO = (
+	"failed to get HTTP URL content", "wrong file identifier/HTTP URL specified",
+	"wrong type of the web page content", "IMAGE_PROCESS_FAILED", "PHOTO_INVALID_DIMENSIONS",
+)
+PHOTO_TRIES = 3
+
 async def send_animal(msg: Message, kind):
 	verdict = limiter.hit((msg.chat.id, msg.from_user.id if msg.from_user else None))
 	if verdict != ALLOW:
@@ -156,10 +165,18 @@ async def send_picture(msg, kind, reply):
 			# InaccessibleMessage, which has no thread.
 			bot=msg.bot, chat_id=msg.chat.id, message_thread_id=getattr(msg, "message_thread_id", None),
 		):
-			photo_url, caption = await fetch()
-			# One photo is a sendPhoto. sendMediaGroup is documented for albums of
-			# 2-10 items, and aiogram 3 has no MediaGroup to build one from anyway.
-			await answer_photo(photo_url, caption=caption, reply_markup=MORE[kind])
+			for tries_left in reversed(range(PHOTO_TRIES)):
+				photo_url, caption = await fetch()
+				try:
+					# One photo is a sendPhoto. sendMediaGroup is documented for albums
+					# of 2-10 items, and aiogram 3 has no MediaGroup to build one from
+					# anyway.
+					await answer_photo(photo_url, caption=caption, reply_markup=MORE[kind])
+					break
+				except TelegramBadRequest as e:
+					if not tries_left or not any(s in e.message for s in UNUSABLE_PHOTO):
+						raise
+					logging.warning("Telegram could not use %s: %s", photo_url, e.message)
 	except Unavailable as e:
 		# Every source is down. Saying so tells people a retry right now will not
 		# help; the pool has already logged why each source failed.

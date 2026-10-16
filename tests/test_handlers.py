@@ -231,6 +231,7 @@ class KeywordTest(HandlerTest):
 		self.session.failures["SendPhoto"] = "Bad Request: not enough rights to send photos to the chat"
 		with self.assertLogs(level="WARNING") as logs:
 			await self.feed(message("/cat", chat_type="supergroup"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
 		[sent] = self.session.sent("SendMessage")
 		self.assertIn("нельзя отправлять фото", sent.text)
 		self.assertTrue(all(r.levelno == logging.WARNING and not r.exc_info for r in logs.records))
@@ -257,12 +258,34 @@ class KeywordTest(HandlerTest):
 		self.assertEqual(record.levelno, logging.WARNING)
 		self.assertIn("kicked", record.getMessage())
 
-	async def test_a_photo_telegram_cannot_fetch_gets_an_apology(self):
+	async def test_a_photo_telegram_cannot_fetch_is_replaced_by_another(self):
+		# as a cataas cat whose file is broken, which cataas answers with a 500
+		broken = ["https://cataas.com/cat/broken", "Красивый котик."]
+		self.cat.side_effect = [broken, CAT]
+		self.session.failures["SendPhoto"] = ["Bad Request: failed to get HTTP URL content"]
+		update = message("котик")
+		with self.assertLogs(level="WARNING") as logs:
+			await self.feed(update)
+		photos = self.session.sent("SendPhoto")
+		self.assertEqual([p.photo for p in photos], [broken[0], CAT[0]])
+		self.assertEqual(reply_target(photos[1]), update.message.message_id)
+		self.assertEqual(self.session.sent("SendMessage"), [])
+		[record] = logs.records
+		self.assertIn("cataas.com/cat/broken", record.getMessage())
+
+	async def test_after_three_photos_telegram_cannot_fetch_comes_an_apology(self):
 		self.session.failures["SendPhoto"] = "Bad Request: failed to get HTTP URL content"
 		with self.assertLogs(level="ERROR"):
 			await self.feed(message("котик"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 3)
 		[sent] = self.session.sent("SendMessage")
 		self.assertIn("Что-то пошло не так", sent.text)
+
+	async def test_other_refusals_of_the_photo_are_not_tried_again(self):
+		self.session.failures["SendPhoto"] = "Bad Request: chat not found"
+		with self.assertLogs(level="ERROR"):
+			await self.feed(message("/cat"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 1)
 
 
 class RateLimitTest(HandlerTest):
@@ -379,6 +402,13 @@ class MoreButtonTest(HandlerTest):
 		[sent] = self.session.sent("SendMessage")
 		self.assertIn("Котики сейчас недоступны", sent.text)
 		self.assertIsNone(reply_target(sent))
+
+	async def test_a_button_replaces_a_photo_telegram_cannot_fetch_as_well(self):
+		self.session.failures["SendPhoto"] = ["Bad Request: wrong file identifier/HTTP URL specified"]
+		with self.assertLogs(level="WARNING"):
+			await self.feed(button("more:dog"))
+		self.assertEqual(len(self.session.sent("SendPhoto")), 2)
+		self.assertEqual(self.dog.await_count, 2)
 
 	async def test_a_button_it_does_not_know_is_left_alone(self):
 		result = await self.feed(button("something"))

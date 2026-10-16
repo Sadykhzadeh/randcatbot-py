@@ -32,7 +32,8 @@ class FakeSession(BaseSession):
 		# downloads the picture; everything else answers at once
 		self.delays = {}
 		# Bot API methods that fail, mapped to Telegram's error description;
-		# one starting "Forbidden" is a 403, as Telegram sends it
+		# one starting "Forbidden" is a 403, as Telegram sends it. A list of
+		# descriptions fails that many calls in turn, and the rest succeed.
 		self.failures = {}
 		# Bot API methods refused by flood control, mapped to the seconds
 		# Telegram asks the bot to wait
@@ -51,6 +52,8 @@ class FakeSession(BaseSession):
 		if wait:
 			raise TelegramRetryAfter(method=method, message="Too Many Requests", retry_after=wait)
 		failure = self.failures.get(type(method).__name__)
+		if isinstance(failure, list):
+			failure = failure.pop(0) if failure else None
 		if failure:
 			error = TelegramForbiddenError if failure.startswith("Forbidden") else TelegramBadRequest
 			raise error(method=method, message=failure)
