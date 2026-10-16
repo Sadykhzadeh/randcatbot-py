@@ -99,9 +99,13 @@ async def inline_echo(iq: InlineQuery):
 			title = "😺" if kind == "cat" else "🐶",
 			caption = caption
 		))
+	# Scrolled to the end of the list, the client asks again with next_offset,
+	# and gets four more. Counted up so that every page has its own offset; an
+	# empty one tells the client there is nothing more, as with the sources down.
+	page = int(iq.offset) if iq.offset.isdecimal() else 0
 	# Answered even when empty: an unanswered inline query leaves the client
 	# spinning.
-	await iq.answer(results=results, cache_time = 1)
+	await iq.answer(results=results, cache_time = 1, next_offset=str(page + 1) if results else "")
 
 # One picture a second per person and chat: Telegram asks bots to keep to about
 # one message a second in a chat, and past that answers with flood waits. The
